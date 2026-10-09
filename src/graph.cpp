@@ -7,6 +7,8 @@
 
 #include <acc/bvh_tree.h>
 
+#include "thread_config.h"
+
 
 Graph::Graph(int _faces_num, int _views_num) :faces_num(_faces_num), views_num(_views_num) {
 	data_costs.resize(_faces_num);
@@ -179,7 +181,7 @@ int Graph::calculate_data_cost(const Model& model, const std::vector<View>& view
 		std::numeric_limits<float>::epsilon(), scene_radius * 1.0e-4f);
 	const float parallel_ray_length = std::max(1.0f, scene_radius * 2.0f);
 
-	BVHTree bvh_tree(bvh_faces, bvh_vertices);
+	BVHTree bvh_tree(bvh_faces, bvh_vertices, configured_thread_count());
 	tex_loop(j, views_num) {
 		view_direction[j] = surface_to_camera_direction(views[j]);
 		if (views[j].projection_type == ProjectionType::Perspective) {

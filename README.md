@@ -85,6 +85,14 @@ The MRF Potts smoothness weight can also be overridden:
 
 The default is `1`.
 
+Limit both mapMAP/oneTBB and BVH construction to a fixed number of threads:
+
+```bash
+3DTEXTURE_THREADS=1
+```
+
+Omitting the variable uses the hardware thread count.
+
 Equivalent build/run scripts are kept for Windows, while CMake is now the build orchestrator for Linux.
 
 Directory structure:

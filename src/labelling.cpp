@@ -8,6 +8,11 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
+
+#include <tbb/global_control.h>
+
+#include "thread_config.h"
 
 int labelling(const Model &model, const Adj_face_list &adj_face_list, 
 	const std::vector<View>& views, std::vector<int>& labels)
@@ -17,6 +22,16 @@ int labelling(const Model &model, const Adj_face_list &adj_face_list,
 
 	// mapMAP template parameters
 	const unsigned int simd_w = mapmap::sys_max_simd_width<float>();
+
+	// Respect 3DTEXTURE_THREADS for mapMAP/oneTBB work. A global_control object
+	// must remain alive for the duration of optimization.
+	const int thread_count = configured_thread_count();
+	std::unique_ptr<tbb::global_control> parallelism_control;
+	if (thread_count_overridden()) {
+		parallelism_control.reset(new tbb::global_control(
+			tbb::global_control::max_allowed_parallelism,
+			static_cast<std::size_t>(thread_count)));
+	}
 
 	// cost types
 	using unary_t = mapmap::UnaryTable<float, simd_w>;
