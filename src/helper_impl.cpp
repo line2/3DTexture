@@ -2,6 +2,8 @@
 
 #include <unordered_map>
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -20,7 +22,6 @@ int read_obj_model(std::string filename, Model& model) {
 		return -1;
 	}
 	std::string line;
-	bool has_vn = false;
 	while (std::getline(fin, line)) {
 		std::istringstream sin(line);
 		std::string format;
@@ -31,39 +32,57 @@ int read_obj_model(std::string filename, Model& model) {
 			model.vertices.emplace_back(x, y, z);
 		}
 		if (format == "vn") {
-			has_vn = true;
 			float x, y, z;
 			sin >> x >> y >> z;
 			model.normals.emplace_back(x, y, z);
 		}
 		if (format == "f") {
 			int f[10] = { 0 };
-			size_t space = line.find_first_of(' ');
-			line = line.substr(space + 1, -1);
-			
-
-			tex_loop(i, 3){ // 3d points index
-				space = line.find_first_of(' ');
-				std::string p = line.substr(0, space);
-				size_t slash = 0;
-				int j = 0; // 0:vertex, 3:normal, 6:texcoord
-				do {
-					slash = p.find_first_of('/');
-					if (slash == 0) {
-						p = p.substr(1, -1);
-						slash = p.find_first_of('/');
-					}
-					std::string num = p.substr(0, slash);
-					f[i + j] = std::stoi(num) - 1;
-					p = p.substr(slash + 1, -1);
-					j += 3;
-				} while (slash != std::string::npos);
-				line = line.substr(space + 1, -1);
+			std::vector<std::string> tokens;
+			std::string token;
+			while (sin >> token) {
+				tokens.push_back(token);
 			}
-			
-			std::vector<int> one_face({ f[0], f[1], f[2], f[3], f[4], f[5], 0, 0, 0, 0 });// dont need texcoord
-			if (f[0] != f[1] && f[1] != f[2] && f[2] != f[0])
+			if (tokens.size() < 3) {
+				LOGW("ignoring face with fewer than three vertices in %s", filename.c_str());
+				continue;
+			}
+			bool valid = true;
+			for (int i = 0; i < 3; ++i) {
+				std::vector<std::string> fields;
+				std::string field;
+				std::stringstream field_stream(tokens[i]);
+				while (std::getline(field_stream, field, '/')) {
+					fields.push_back(field);
+				}
+				auto parse_index = [&](const std::string& text) {
+					if (text.empty()) {
+						return 0;
+					}
+					errno = 0;
+					char* end = nullptr;
+					const long parsed = std::strtol(text.c_str(), &end, 10);
+					if (errno != 0 || end == text.c_str() || *end != '\0' || parsed == 0) {
+						valid = false;
+						return 0;
+					}
+					return static_cast<int>(parsed - 1);
+				};
+				// OBJ token order is vertex/texcoord/normal. The internal face
+				// order is vertex, normal, texcoord.
+				f[i] = parse_index(fields.size() > 0 ? fields[0] : std::string());
+				f[i + 6] = parse_index(fields.size() > 1 ? fields[1] : std::string());
+				f[i + 3] = parse_index(fields.size() > 2 ? fields[2] : std::string());
+			}
+			if (!valid) {
+				LOGW("ignoring invalid face in %s", filename.c_str());
+				continue;
+			}
+			std::vector<int> one_face({ f[0], f[1], f[2], f[3], f[4], f[5],
+				f[6], f[7], f[8], 0 });
+			if (f[0] != f[1] && f[1] != f[2] && f[2] != f[0]) {
 				model.faces.insert(model.faces.end(), one_face.begin(), one_face.end());
+			}
 		}
 	}
 

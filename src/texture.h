@@ -161,4 +161,5 @@ int labelling(const Model &model, const Adj_face_list &adj_face_list,
 	const std::vector<View>& views, std::vector<int>& labels);
 
 int seamless_texturing(const Model& src_model, const std::vector<View> &views, const Adj_face_list& adj_face_list,
-	const std::vector<int>& labels, Model& rst_model, std::vector<Image>& texture_imgs);
+	const std::vector<int>& labels, Model& rst_model, std::vector<Image>& texture_imgs,
+	int* patch_count = nullptr);

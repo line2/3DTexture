@@ -2,8 +2,8 @@
 
 This repository contains a C++ implementation of
 **"Let There Be Color! Large-Scale Texturing of 3D Reconstructions"** (ECCV 2014).
-The current maintained build is Linux + CMake, and the executable is pure C++.
-It does not depend on OpenCV, Open3D, Python, or uv.
+The maintained build is Linux + CMake and the executable is pure C++. It does not
+depend on OpenCV, Open3D, Python, or uv.
 
 ## Current status
 
@@ -12,13 +12,12 @@ It does not depend on OpenCV, Open3D, Python, or uv.
 - Strict orthographic projection is supported with an explicit `ORTHO` marker.
 - Orthographic visibility uses parallel rays rather than a finite camera center.
 - Image decoding/encoding uses bundled stb libraries instead of OpenCV.
+- Structured CLI input is supported for TUM, `test04`, and `eval_6cases`.
+- Exact XYZ vertex welding is enabled by default for the structured `run` path.
 - Texture-page size, color adjustment, MRF weighting, and thread usage can be
-  configured with environment variables.
-- A unit test covers orthographic projection parsing, projection math, and
-  parallel-ray visibility.
-- Input meshes are used as provided. This version does not automatically weld
-  duplicate vertices or convert an external metadata format such as
-  `eval_metadata.json` into `.cam` files.
+  configured with CLI flags or environment variables.
+- Unit tests cover orthographic projection, welding, dataset discovery, and GLB loading.
+- Input meshes used through the legacy positional CLI are preserved as-is.
 
 ## Build
 
@@ -28,14 +27,14 @@ Install the system dependencies:
 ./scripts/install_dependencies.sh
 ```
 
-Configure and build with the Linux release preset:
+Configure and build:
 
 ```bash
 cmake --preset linux-release
 cmake --build --preset linux-release
 ```
 
-Alternatively, use the build script:
+Alternative:
 
 ```bash
 ./scripts/build.sh
@@ -47,57 +46,75 @@ The executable is written to:
 build/Release/3DTexture
 ```
 
-Debug builds are also available:
-
-```bash
-cmake --preset linux-debug
-cmake --build --preset linux-debug
-```
-
 ## Run
 
-Run the default bundled TUM dataset:
+### Structured CLI
 
 ```bash
-./run.sh
+./build/Release/3DTexture run \
+    --dataset <dataset-root-or-case-dir> \
+    --output <output-root> \
+    [--format auto|tum|test04|eval6cases] \
+    [--threads N] \
+    [--texture-size N] \
+    [--color-lambda F] \
+    [--color-average 0|1] \
+    [--pairwise-weight F] \
+    [--no-weld]
 ```
 
-Run another bundled dataset:
+The dataset root may be either one case directory or a directory containing
+multiple case directories. Each case is written to:
+
+```text
+<output-root>/<case-id>/
+```
+
+A top-level `summary.json` records per-case success, mesh statistics, patch
+count, texture-page count, and runtime.
+
+### TUM example
 
 ```bash
 ./run.sh dataset/rgbd_dataset_freiburg1_room
 ```
 
-Call the executable directly:
+or:
 
 ```bash
-./build/Release/3DTexture <mesh.obj> <rgb_cam_dir> <output_dir>
+./build/Release/3DTexture run \
+    --dataset dataset/rgbd_dataset_freiburg1_teddy \
+    --output /tmp/3dtexture-tum \
+    --texture-size 2048
 ```
 
-For example:
+### eval_6cases example
 
 ```bash
-./build/Release/3DTexture \
-    dataset/rgbd_dataset_freiburg1_teddy/mesh.obj \
-    dataset/rgbd_dataset_freiburg1_teddy/rgb_cam \
-    dataset/rgbd_dataset_freiburg1_teddy/out
+./scripts/run_eval_6cases.sh \
+    /path/to/eval_6cases.zip \
+    /path/to/output-root \
+    --texture-size 2048
 ```
 
-The output directory is created if necessary. Typical outputs are:
+The script extracts the archive to a temporary directory, discovers all case
+directories, runs the pipeline, and writes `summary.json`.
 
-```text
-result.obj
-result.mtl
-label.obj
-label.txt
-0000.png
-0001.png
-...
+### Legacy positional CLI
+
+The original positional interface remains available:
+
+```bash
+./build/Release/3DTexture <mesh.obj> <rgb_cam_dir> <output-dir>
 ```
 
-## Input format
+The legacy path intentionally does not apply the new automatic welding step.
 
-A dataset directory must contain:
+## Input formats
+
+### TUM / legacy
+
+A case directory must contain:
 
 ```text
 mesh.obj
@@ -105,17 +122,38 @@ rgb_cam/*.cam
 rgb_cam/*.jpg  (or .jpeg / .png)
 ```
 
-Each image must have a `.cam` file with the same base name. Images are loaded
-in sorted filename order. For stable results, use numeric prefixes such as:
+Images are loaded in sorted filename order. Each image must have a `.cam` file
+with the same base name.
+
+### test04
+
+A case directory must contain:
 
 ```text
-00_front.jpg  00_front.cam
-01_right.jpg  01_right.cam
+eval_metadata.json
+mesh.obj
+<view-name>.png or <view-name>.jpg
 ```
 
-The executable expects the mesh and camera poses to already be in the same
-coordinate system. It does not read `eval_metadata.json`, perform an OBJ
-coordinate conversion, or choose views automatically.
+The adapter reads `selected_views`, aggregates shard camera manifests, converts
+OBJ coordinates to the render coordinate system, infers the normalization scale
+from `camera_fit`, and builds strict orthographic views.
+
+### eval_6cases
+
+A case directory must contain:
+
+```text
+sample_manifest.json
+mesh/<case>_textured.glb
+rank_000..003/controls/render_manifest.json
+rank_000..003/controls/selected_views.json
+composite_<view>.png
+```
+
+The adapter merges the 16 selected views across the four rank directories and
+uses `<case>_textured.glb` as the geometry source. Existing GLB materials and
+textures are ignored.
 
 ## Camera file format
 
@@ -125,10 +163,7 @@ All rotations and translations define a world-to-camera transform:
 p_cam = R * p_world + t
 ```
 
-### Perspective cameras
-
-A legacy `.cam` file without a projection marker is interpreted as a
-perspective camera. An explicit marker is also accepted:
+### Perspective
 
 ```text
 PERSP
@@ -139,12 +174,10 @@ r20 r21 r22
 f d0 d1 ppect cx cy
 ```
 
-The original format stores normalized intrinsic values. The program converts
-`f`, `cx`, and `cy` to pixel units using the loaded image dimensions.
+The original format stores normalized intrinsics. The program converts `f`,
+`cx`, and `cy` to pixel units using the loaded image dimensions.
 
-### Orthographic cameras
-
-Orthographic views must start with an explicit marker:
+### Orthographic
 
 ```text
 ORTHO
@@ -155,7 +188,7 @@ r20 r21 r22
 sx sy cx cy
 ```
 
-The intrinsics are already in pixel units. Projection is:
+Projection is:
 
 ```text
 u = sx * x_cam + cx
@@ -163,11 +196,9 @@ v = sy * y_cam + cy
 ```
 
 Visibility for orthographic views is tested with rays parallel to the camera
-forward direction. This avoids incorrectly using a finite perspective camera
-center for an orthographic render.
+forward direction.
 
-For an orthographic image rendered with an `ortho_scale` in world units, the
-usual scale conversion is:
+For an orthographic image rendered with an `ortho_scale` in world units:
 
 ```text
 sx = sy = image_size / ortho_scale
@@ -177,109 +208,126 @@ The principal point is normally the image center.
 
 ## Runtime options
 
+CLI values override environment variables, and environment variables override
+defaults.
+
 ### Texture-page size
 
-The default square texture-page size is 1000 pixels. Meshes that have been
-welded can contain large connected patches and may require a larger page:
+```bash
+--texture-size 2048
+```
+
+or:
 
 ```bash
-3DTEXTURE_TEXTURE_SIZE=2048 ./build/Release/3DTexture mesh.obj views out
+3DTEXTURE_TEXTURE_SIZE=2048
 ```
 
 Valid values are 1–16384.
 
 ### Seamless color adjustment
 
-The seamless color solver exposes two options:
+```bash
+--color-lambda 0.3
+--color-average 0
+```
+
+or:
 
 ```bash
 3DTEXTURE_COLOR_LAMBDA=0.3
 3DTEXTURE_COLOR_AVERAGE=0
 ```
 
-- `3DTEXTURE_COLOR_LAMBDA` controls the smoothness weight. Larger values
-  favor smoother adjustments; smaller values enforce stronger seam agreement.
-- `3DTEXTURE_COLOR_AVERAGE=0` uses direct projected vertex colors instead of
-  the sampled edge average.
-
-The defaults are:
-
-```text
-3DTEXTURE_COLOR_LAMBDA=0.1
-3DTEXTURE_COLOR_AVERAGE=1
-```
-
 ### MRF smoothness weight
 
-The Potts smoothness weight can be overridden:
+```bash
+--pairwise-weight 5
+```
+
+or:
 
 ```bash
 3DTEXTURE_PAIRWISE_WEIGHT=5
 ```
 
-The default is `1`.
-
 ### Thread limit
 
-MapMAP, oneTBB, and BVH construction can be limited to a fixed number of
-threads:
+```bash
+--threads 1
+```
+
+or:
 
 ```bash
 3DTEXTURE_THREADS=1
 ```
 
-Omitting the variable uses the hardware thread count. A value of `1` is useful
-for deterministic debugging and for comparing runs.
+## Vertex welding
+
+The structured `run` path performs exact XYZ welding by default:
+
+- vertices with identical coordinates are merged;
+- face indices are remapped;
+- degenerate faces are removed;
+- unreferenced vertices are removed;
+- per-corner normals are retained or generated when missing.
+
+Use `--no-weld` to disable it.
+
+The legacy positional CLI does not weld input meshes.
 
 ## Tests
-
-After building, run the CTest suite:
 
 ```bash
 ctest --test-dir build/Release --output-on-failure
 ```
 
-The current test covers:
+The suite covers:
 
-- explicit orthographic `.cam` parsing,
-- orthographic projection values,
-- parallel-ray visibility,
-- backward compatibility with unmarked perspective `.cam` files.
+- orthographic projection parsing and math;
+- parallel-ray occlusion;
+- exact vertex welding;
+- dataset discovery;
+- minimal GLB geometry loading.
 
 ## Implementation notes
 
 The maintained pipeline is:
 
 ```text
-load OBJ
-load images and .cam poses
+discover dataset cases
+load mesh and views
+weld duplicate vertices
 build face adjacency
 choose per-face source views with an MRF solver
 solve seamless color adjustment
 pack texture patches
 rasterize projected colors into texture pages
 write OBJ/MTL/texture outputs
+write run_manifest.json and summary.json
 ```
 
-Patch packing failures are reported and terminate the run. If a welded input
-mesh contains a patch larger than the configured page, increase
-`3DTEXTURE_TEXTURE_SIZE`.
+Patch-packing failures are reported and terminate the affected case.
 
 ## Dependencies
 
-Runtime/build dependencies:
+System dependencies:
 
 - C++17 compiler
-- CMake (3.21 or newer is recommended for the supplied presets)
+- CMake 3.21 or newer for the supplied presets
 - pkg-config
-- oneTBB from the system package manager
+- oneTBB
+- unzip for `scripts/run_eval_6cases.sh`
 
-Bundled source dependencies:
+Bundled dependencies:
 
-- Eigen for matrix calculations and linear solves
-- stb for JPEG/PNG decoding and PNG writing
-- libacc for BVH-accelerated occlusion tests
-- mapMAP for MRF optimization
+- Eigen
+- stb
+- libacc
+- mapMAP
+- nlohmann/json
+- TinyGLTF
 
 There is no OpenCV or Open3D dependency.
 
@@ -288,16 +336,11 @@ There is no OpenCV or Open3D dependency.
 ```text
 CMakeLists.txt              CMake build description
 CMakePresets.json           Linux debug/release presets
-scripts/install_dependencies.sh
-scripts/build.sh
-run.sh
-src/                         C++ implementation
-tests/                       Orthographic projection unit test
-thirdparty/                  Eigen, stb, libacc, and mapMAP sources
-dataset/                     Bundled TUM examples
-3DTexture/                   Legacy Visual Studio project
+scripts/                    Install, build, run, and eval_6cases scripts
+src/                        C++ implementation
+tests/                      Unit and integration tests
+thirdparty/                 Bundled C++ dependencies
+dataset/                    Bundled TUM examples
+3DTexture/                  Legacy Visual Studio project
 x64/                         Legacy Windows example binaries
 ```
-
-The legacy Windows project files are retained for reference. CMake is the
-maintained build orchestrator.

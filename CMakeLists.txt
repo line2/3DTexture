@@ -20,13 +20,18 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(TBB REQUIRED IMPORTED_TARGET tbb)
 
 add_executable(3DTexture
-    src/texture.cpp
+    src/cli.cpp
+    src/dataset.cpp
+    src/glb_loader.cpp
     src/image.cpp
     src/helper_impl.cpp
     src/graph.cpp
     src/labelling.cpp
+    src/pipeline.cpp
     src/seamless_texturing.cpp
-    src/texture_generator.cpp)
+    src/texture.cpp
+    src/texture_generator.cpp
+    src/welding.cpp)
 
 target_include_directories(3DTexture PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -34,7 +39,9 @@ target_include_directories(3DTexture SYSTEM PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/eigen335
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/mapMAP
-    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc)
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/tinygltf)
 target_link_libraries(3DTexture PRIVATE PkgConfig::TBB)
 
 if(MSVC)
@@ -59,7 +66,9 @@ if(BUILD_TESTING)
     target_include_directories(orthographic_projection_test SYSTEM PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/eigen335
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
-        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc)
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/tinygltf)
     if(MSVC)
         target_compile_options(orthographic_projection_test PRIVATE /W4 /permissive-)
     else()
@@ -67,6 +76,31 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME OrthographicProjection COMMAND orthographic_projection_test)
+
+    add_executable(engineering_test
+        tests/engineering_test.cpp
+        src/cli.cpp
+        src/dataset.cpp
+        src/glb_loader.cpp
+        src/image.cpp
+        src/helper_impl.cpp
+        src/graph.cpp
+        src/welding.cpp)
+
+    target_include_directories(engineering_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_include_directories(engineering_test SYSTEM PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/eigen335
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nlohmann
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/tinygltf)
+    if(MSVC)
+        target_compile_options(engineering_test PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(engineering_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME Engineering COMMAND engineering_test)
 endif()
 
 include(GNUInstallDirs)

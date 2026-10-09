@@ -41,22 +41,22 @@ run_pkg() {
 if command -v apt-get >/dev/null 2>&1; then
     run_pkg apt-get update
     run_pkg apt-get install -y \
-        build-essential cmake pkg-config libtbb-dev
+        build-essential cmake pkg-config libtbb-dev unzip
 elif command -v dnf >/dev/null 2>&1; then
     run_pkg dnf install -y \
-        gcc-c++ make cmake pkgconf tbb-devel
+        gcc-c++ make cmake pkgconf tbb-devel unzip
 elif command -v zypper >/dev/null 2>&1; then
     run_pkg zypper install -y \
-        gcc-c++ make cmake pkg-config tbb-devel
+        gcc-c++ make cmake pkg-config tbb-devel unzip
 elif command -v pacman >/dev/null 2>&1; then
     run_pkg pacman -Sy --needed --noconfirm \
-        base-devel cmake pkgconf onetbb
+        base-devel cmake pkgconf onetbb unzip
 elif command -v apk >/dev/null 2>&1; then
     run_pkg apk add \
-        build-base cmake pkgconfig tbb-dev
+        build-base cmake pkgconfig tbb-dev unzip
 else
     echo "Unsupported package manager. Install these dependencies manually:" >&2
-    echo "  CMake >= 3.16, C++17 compiler, pkg-config, oneTBB" >&2
+    echo "  CMake >= 3.16, C++17 compiler, pkg-config, oneTBB, unzip" >&2
     exit 1
 fi
 

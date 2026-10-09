@@ -1,7 +1,8 @@
 #include "texture.h"
 
 int seamless_texturing(const Model& src_model, const std::vector<View> &views, const Adj_face_list& adj_list,
-	const std::vector<int>& labels, Model& rst_model, std::vector<Image>& texture_imgs)
+	const std::vector<int>& labels, Model& rst_model, std::vector<Image>& texture_imgs,
+	int* patch_count)
 {
 	TG tg; // texture_generator
 	tg.configure_color_adjustment();
@@ -30,5 +31,8 @@ int seamless_texturing(const Model& src_model, const std::vector<View> &views, c
 
 	//color adjusetment & generate texture image
 	tg.generate_texture(rst_model, views, texture_num, texture_imgs);
+	if (patch_count != nullptr) {
+		*patch_count = tg.patches_num;
+	}
 	return texture_num;
 }
