@@ -5,6 +5,3 @@ dataset/*/out/
 *.a
 *.so
 *.dylib
-.venv/
-__pycache__/
-*.py[cod]
