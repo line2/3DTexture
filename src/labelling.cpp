@@ -5,6 +5,10 @@
 #include <fstream>
 #include <algorithm>
 
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+
 int labelling(const Model &model, const Adj_face_list &adj_face_list, 
 	const std::vector<View>& views, std::vector<int>& labels)
 {
@@ -18,13 +22,30 @@ int labelling(const Model &model, const Adj_face_list &adj_face_list,
 	using unary_t = mapmap::UnaryTable<float, simd_w>;
 	using pairwise_t = mapmap::PairwisePotts<float, simd_w>;
 
+	// Larger Potts weights merge small view-label islands and reduce the
+	// number of fragmented texture patches. The original implementation used
+	// a fixed value of 1.0.
+	float pairwise_weight = 1.0f;
+	if (const char* weight_value = std::getenv("3DTEXTURE_PAIRWISE_WEIGHT")) {
+		errno = 0;
+		char* end = nullptr;
+		const float parsed = std::strtof(weight_value, &end);
+		if (errno == 0 && end != weight_value && *end == '\0' &&
+			std::isfinite(parsed) && parsed >= 0.0f) {
+			pairwise_weight = parsed;
+		}
+		else {
+			LOGW("invalid 3DTEXTURE_PAIRWISE_WEIGHT value: %s", weight_value);
+		}
+	}
+
 	//data structures
 	mapmap::Graph<float> map_graph(graph.faces_num);
 	mapmap::LabelSet<float, simd_w> map_labels(graph.faces_num, 0);
 
 	std::vector<unary_t> unaries;
 	unaries.reserve(graph.faces_num);
-	pairwise_t pairwise(1.0f);
+	pairwise_t pairwise(pairwise_weight);
 
 	// termination criterion and control flow
 	mapmap::StopWhenReturnsDiminish<float, simd_w> terminate(5, 0.01);

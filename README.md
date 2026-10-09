@@ -67,7 +67,23 @@ The seamless color solver exposes two runtime options:
 
 `3DTEXTURE_COLOR_LAMBDA` controls the smoothness weight. Larger values favor smoother adjustments; smaller values enforce stronger seam agreement. `3DTEXTURE_COLOR_AVERAGE=0` uses the direct projected vertex color instead of the sampled edge average. On the bundled orthographic test, `0.3` and direct vertex colors produced the most consistent seams.
 
+Set a larger square texture page when welded meshes produce large connected patches:
+
+```bash
+3DTEXTURE_TEXTURE_SIZE=2048
+```
+
+The default remains 1000. Valid values are 1–16384.
+
 Both variables are optional; the defaults remain `0.1` and edge averaging enabled.
+
+The MRF Potts smoothness weight can also be overridden:
+
+```bash
+3DTEXTURE_PAIRWISE_WEIGHT=5
+```
+
+The default is `1`.
 
 Equivalent build/run scripts are kept for Windows, while CMake is now the build orchestrator for Linux.
 

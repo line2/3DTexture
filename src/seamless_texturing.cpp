@@ -18,6 +18,10 @@ int seamless_texturing(const Model& src_model, const std::vector<View> &views, c
 
 	//mapping: origin image to texture;
 	int texture_num = tg.patch_arrange();
+	if (texture_num < 1) {
+		LOGE("failed to arrange texture patches");
+		return -1;
+	}
 
 
 	//tg.vertex_info_map_to_vec();

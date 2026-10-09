@@ -242,6 +242,20 @@ void Texture_generator::calculate_bboxes(const Model& model) {
 
 
 void Texture_generator::configure_color_adjustment() {
+	if (const char* texture_size_value = std::getenv("3DTEXTURE_TEXTURE_SIZE")) {
+		errno = 0;
+		char* end = nullptr;
+		const long parsed = std::strtol(texture_size_value, &end, 10);
+		if (errno == 0 && end != texture_size_value && *end == '\0' &&
+			parsed >= 1 && parsed <= 16384) {
+			texture_width = static_cast<int>(parsed);
+			texture_height = static_cast<int>(parsed);
+		}
+		else {
+			LOGW("invalid 3DTEXTURE_TEXTURE_SIZE value: %s", texture_size_value);
+		}
+	}
+
 	if (const char* lambda_value = std::getenv("3DTEXTURE_COLOR_LAMBDA")) {
 		errno = 0;
 		char* end = nullptr;
