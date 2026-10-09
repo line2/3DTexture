@@ -19,8 +19,36 @@ def load_module():
     return module
 
 
+def test_exact_vertex_welding(module) -> None:
+    mesh = o3d.geometry.TriangleMesh()
+    mesh.vertices = o3d.utility.Vector3dVector(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ]
+    )
+    mesh.triangles = o3d.utility.Vector3iVector(
+        [[0, 1, 2], [2, 3, 4], [0, 1, 5]]
+    )
+    mesh.triangle_uvs = o3d.utility.Vector2dVector(
+        np.arange(18, dtype=np.float64).reshape((-1, 2))
+    )
+
+    info = module.weld_duplicate_vertices(mesh)
+    assert len(mesh.vertices) == 5
+    assert len(mesh.triangles) == 2
+    assert len(mesh.triangle_uvs) == 6
+    assert info["removed_duplicate_vertices"] == 1
+    assert info["removed_degenerate_triangles"] == 1
+
+
 def main() -> None:
     module = load_module()
+    test_exact_vertex_welding(module)
     image = o3d.t.geometry.Image(np.zeros((8, 8, 3), dtype=np.uint8))
 
     # Columns are image-right, image-up, and camera-backward.  This camera looks

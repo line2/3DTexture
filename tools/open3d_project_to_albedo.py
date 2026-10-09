@@ -9,11 +9,12 @@ For the ``test_04`` metadata format, cameras are stored as camera-to-world
 matrices.  Open3D's ``project_images_to_albedo`` API accepts world-to-camera
 pinhole cameras, so this tool:
 
-1. converts OBJ coordinates to the render coordinate system when needed,
-2. estimates/uses the uniform mesh scale used by the renderer,
-3. converts each orthographic camera into an equivalent pinhole camera at a
+1. welds exact duplicate XYZ vertices before any projection work,
+2. converts OBJ coordinates to the render coordinate system when needed,
+3. estimates/uses the uniform mesh scale used by the renderer,
+4. converts each orthographic camera into an equivalent pinhole camera at a
    large virtual distance, and
-4. calls ``TriangleMesh.project_images_to_albedo``.
+5. calls ``TriangleMesh.project_images_to_albedo``.
 
 The virtual pinhole conversion is intentionally explicit.  It is very close to
 orthographic for normalized meshes, but it is still a finite-perspective
@@ -102,6 +103,14 @@ def parse_args() -> argparse.Namespace:
         "--views",
         default=None,
         help="Comma-separated selected view names (default: metadata order)",
+    )
+    parser.add_argument(
+        "--no-weld",
+        action="store_true",
+        help=(
+            "Disable exact vertex welding. By default, vertices with identical "
+            "XYZ coordinates are merged before projection."
+        ),
     )
     parser.add_argument(
         "--no-glb",
@@ -310,12 +319,62 @@ def estimate_scale_for_transform(
     return scale, error
 
 
+def weld_duplicate_vertices(mesh: o3d.geometry.TriangleMesh) -> dict[str, Any]:
+    """Merge exact XYZ duplicates and remove resulting degenerate faces.
+
+    Open3D stores OBJ UVs per triangle corner, so merging vertex indices does
+    not discard UV seams. This is deliberately an exact-coordinate weld; it
+    does not move geometry or merge points that are merely close.
+    """
+    input_vertices = len(mesh.vertices)
+    input_triangles = len(mesh.triangles)
+    if input_vertices == 0 or input_triangles == 0:
+        raise ValueError("Cannot weld an empty mesh")
+
+    mesh.remove_duplicated_vertices()
+
+    triangles = np.asarray(mesh.triangles)
+    vertices = np.asarray(mesh.vertices)
+    removed_degenerate_triangles = 0
+    if triangles.shape[0] != 0:
+        edge_1 = vertices[triangles[:, 1]] - vertices[triangles[:, 0]]
+        edge_2 = vertices[triangles[:, 2]] - vertices[triangles[:, 0]]
+        area_2 = np.linalg.norm(np.cross(edge_1, edge_2), axis=1)
+        keep_face = area_2 > 0.0
+        removed_degenerate_triangles = int(np.count_nonzero(~keep_face))
+        if removed_degenerate_triangles:
+            triangle_uvs = np.asarray(mesh.triangle_uvs)
+            if triangle_uvs.shape[0] != 3 * input_triangles:
+                raise ValueError("Unexpected triangle UV count while welding")
+            mesh.triangles = o3d.utility.Vector3iVector(
+                triangles[keep_face].astype(np.int32)
+            )
+            mesh.triangle_uvs = o3d.utility.Vector2dVector(
+                triangle_uvs.reshape((-1, 3, 2))[keep_face].reshape((-1, 2))
+            )
+
+    if len(mesh.triangles) == 0:
+        raise ValueError("Vertex welding removed all triangles")
+
+    return {
+        "enabled": True,
+        "method": "exact_xyz",
+        "input_vertices": input_vertices,
+        "output_vertices": len(mesh.vertices),
+        "removed_duplicate_vertices": input_vertices - len(mesh.vertices),
+        "input_triangles": input_triangles,
+        "output_triangles": len(mesh.triangles),
+        "removed_degenerate_triangles": removed_degenerate_triangles,
+    }
+
+
 def prepare_mesh(
     mesh_path: Path,
     metadata: dict[str, Any],
     views: list[dict[str, Any]],
     coordinate_frame: str,
     mesh_scale: float | None,
+    weld: bool,
 ) -> tuple[o3d.geometry.TriangleMesh, dict[str, Any]]:
     legacy = o3d.io.read_triangle_mesh(str(mesh_path))
     if len(legacy.vertices) == 0 or len(legacy.triangles) == 0:
@@ -325,6 +384,21 @@ def prepare_mesh(
             "Mesh has no per-corner UV coordinates. Open3D's "
             "project_images_to_albedo requires an existing UV atlas."
         )
+
+    welding = (
+        weld_duplicate_vertices(legacy)
+        if weld
+        else {
+            "enabled": False,
+            "method": "disabled",
+            "input_vertices": len(legacy.vertices),
+            "output_vertices": len(legacy.vertices),
+            "removed_duplicate_vertices": 0,
+            "input_triangles": len(legacy.triangles),
+            "output_triangles": len(legacy.triangles),
+            "removed_degenerate_triangles": 0,
+        }
+    )
 
     vertices = np.asarray(legacy.vertices, dtype=np.float64)
     obj_scale, obj_error = estimate_scale_for_transform(vertices, metadata, views, True)
@@ -362,6 +436,7 @@ def prepare_mesh(
         "mesh_radius": radius,
         "auto_fit_error_obj": obj_error,
         "auto_fit_error_render": render_error,
+        "welding": welding,
     }
     return legacy, info
 
@@ -488,7 +563,12 @@ def main() -> int:
     views = load_views(dataset, metadata, selected_names)
 
     legacy_mesh, mesh_info = prepare_mesh(
-        mesh_path, metadata, views, args.coordinate_frame, args.mesh_scale
+        mesh_path,
+        metadata,
+        views,
+        args.coordinate_frame,
+        args.mesh_scale,
+        not args.no_weld,
     )
     tensor_mesh = o3d.t.geometry.TriangleMesh.from_legacy(legacy_mesh)
     if "texture_uvs" not in tensor_mesh.triangle:
@@ -527,6 +607,16 @@ def main() -> int:
             triangles=len(legacy_mesh.triangles),
         )
     )
+    welding = mesh_info["welding"]
+    if welding["enabled"]:
+        print(
+            "Vertex welding: {removed} duplicate vertices removed; "
+            "{output} remain; {degenerate} degenerate faces removed".format(
+                removed=welding["removed_duplicate_vertices"],
+                output=welding["output_vertices"],
+                degenerate=welding["removed_degenerate_triangles"],
+            )
+        )
     print(f"Views: {len(views)}; virtual pinhole distance: {virtual_distance:.9g}")
 
     tensor_images = [image for image in images]

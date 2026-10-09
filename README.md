@@ -159,6 +159,9 @@ Important implementation details:
 
 - The input OBJ must contain an existing UV atlas; Open3D requires
   `texture_uvs`.
+- Before projection, vertices with exactly identical XYZ coordinates are welded.
+  Per-corner UVs are retained, and degenerate faces produced by welding are
+  removed. Use `--no-weld` to disable this step.
 - `eval_metadata.json` stores camera-to-world matrices whose columns are
   image-right, image-up, and camera-backward. The tool converts these to
   Open3D's world-to-camera convention using image-down as row 1 and
@@ -167,7 +170,8 @@ camera-forward as row 2, while preserving the original image-plane origin.
   `project_images_to_albedo`. Each ORTHO camera is therefore converted to an
   equivalent pinhole camera at a large virtual distance:
   `f = virtual_distance * image_size / render_ortho_scale`.
-  The default is a conservative large distance based on mesh radius and original camera depth (at least `1000 * mesh_radius`). Increase
+  The default is a conservative large distance based on mesh radius and
+  original camera depth (at least `1000 * mesh_radius`). Increase
   `--virtual-distance` if you need a closer orthographic approximation.
 - The uniform render mesh scale is inferred from `camera_fit.per_view` when it
   is available. For the raw `test_04` OBJ this recovers the `1 / 1.8`
