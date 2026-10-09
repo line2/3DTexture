@@ -18,7 +18,7 @@ void write_mtl(std::string filename, int texture_num);
 
 int write_obj(std::string filename, const Model& model, int page_num);
 
-void write_texture(std::string path, const std::vector<cv::Mat>& texture_imgs);
+void write_texture(std::string path, const std::vector<Image>& texture_imgs);
 
 
 // piling and debug

@@ -162,7 +162,7 @@ int load_view(std::string path, std::vector<View>& view_list) {
         std::string extension = file.extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(),
             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (extension == ".jpg" || extension == ".jpeg") {
+        if (extension == ".jpg" || extension == ".jpeg" || extension == ".png") {
             image_files.push_back(file);
         }
     }
@@ -184,7 +184,7 @@ int load_view(std::string path, std::vector<View>& view_list) {
 
         view_list.push_back(View());
         View& view = view_list.back();
-        view.img = cv::imread(image_file.string());
+        view.img = Image::load(image_file.string());
         if (view.img.empty()) {
             LOGE("failed to read image %s", image_file.string().c_str());
             view_list.pop_back();
@@ -244,9 +244,9 @@ int load_view(std::string path, std::vector<View>& view_list) {
             }
 
             // The original .cam format stores normalized intrinsics.
-            f *= std::max(view.img.cols, view.img.rows);
-            cx *= view.img.cols;
-            cy *= view.img.rows;
+            f *= std::max(view.img.width(), view.img.height());
+            cx *= view.img.width();
+            cy *= view.img.height();
 
             Eigen::Matrix3f& K = view.K;
             K(0, 0) = f; K(0, 1) = 0; K(0, 2) = cx;
@@ -325,13 +325,15 @@ void write_mtl(std::string filename, int texture_num) {
 	}
 }
 
-void write_texture(std::string path, const std::vector<cv::Mat>& texture_imgs) {
+void write_texture(std::string path, const std::vector<Image>& texture_imgs) {
 	tex_loop(i, texture_imgs.size()) {
 		
 		std::ostringstream ostr;
 		ostr << std::setfill('0') << std::setw(4) << i;
 		std::string filename = path + "/" + ostr.str() + ".png";
-		cv::imwrite(filename, texture_imgs[i]);
+		if (!Image::save_png(filename, texture_imgs[i])) {
+			LOGE("failed to write texture %s", filename.c_str());
+		}
 	}
 }
 

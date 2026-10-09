@@ -1,7 +1,7 @@
 #include "texture.h"
 
 int seamless_texturing(const Model& src_model, const std::vector<View> &views, const Adj_face_list& adj_list,
-	const std::vector<int>& labels, Model& rst_model, std::vector<cv::Mat>& texture_imgs)
+	const std::vector<int>& labels, Model& rst_model, std::vector<Image>& texture_imgs)
 {
 	TG tg; // texture_generator
 	tg.configure_color_adjustment();

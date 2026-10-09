@@ -9,7 +9,7 @@ Options:
   --no-sudo  Run the package manager directly (useful in a root container)
 
 Installs the Linux build dependencies used by the CMake project:
-CMake, a C++17 compiler, pkg-config, OpenCV and oneTBB.
+CMake, a C++17 compiler, pkg-config, and oneTBB.
 USAGE
 }
 
@@ -41,22 +41,22 @@ run_pkg() {
 if command -v apt-get >/dev/null 2>&1; then
     run_pkg apt-get update
     run_pkg apt-get install -y \
-        build-essential cmake pkg-config libopencv-dev libtbb-dev
+        build-essential cmake pkg-config libtbb-dev
 elif command -v dnf >/dev/null 2>&1; then
     run_pkg dnf install -y \
-        gcc-c++ make cmake pkgconf opencv-devel tbb-devel
+        gcc-c++ make cmake pkgconf tbb-devel
 elif command -v zypper >/dev/null 2>&1; then
     run_pkg zypper install -y \
-        gcc-c++ make cmake pkg-config opencv-devel tbb-devel
+        gcc-c++ make cmake pkg-config tbb-devel
 elif command -v pacman >/dev/null 2>&1; then
     run_pkg pacman -Sy --needed --noconfirm \
-        base-devel cmake pkgconf opencv onetbb
+        base-devel cmake pkgconf onetbb
 elif command -v apk >/dev/null 2>&1; then
     run_pkg apk add \
-        build-base cmake pkgconfig opencv-dev tbb-dev
+        build-base cmake pkgconfig tbb-dev
 else
     echo "Unsupported package manager. Install these dependencies manually:" >&2
-    echo "  CMake >= 3.16, C++17 compiler, pkg-config, OpenCV, oneTBB" >&2
+    echo "  CMake >= 3.16, C++17 compiler, pkg-config, oneTBB" >&2
     exit 1
 fi
 

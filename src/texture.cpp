@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 	write_pile(out_dir + "/label.obj", out_dir + "/label.txt", model, labels);
 #endif
 
-	std::vector<cv::Mat> texture_imgs;
+	std::vector<Image> texture_imgs;
 	t0 = std::chrono::steady_clock::now();
 	int texture_num = seamless_texturing(model, views, adj_face_list, labels, model, texture_imgs);
 	t1 = std::chrono::steady_clock::now();

@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <opencv2/opencv.hpp>
+#include "image.h"
 #include <Eigen/Eigen>
 #include <vector>
 #include <set>
@@ -32,7 +32,7 @@ struct Model { //3D model
 
 struct View {
 	ProjectionType projection_type = ProjectionType::Perspective;
-	cv::Mat img;		// RGB image taken from different direction
+	Image img;		// RGB image taken from different direction
 	Eigen::Matrix3f R;	// Extrinsic: Rotation Matrix
 	Eigen::Vector3f t;	// Extrinsic: Translation Vector
 	Eigen::Matrix3f K;	// Perspective intrinsic matrix
@@ -75,8 +75,8 @@ typedef struct SUB_Vertex_info { // sub-vertex color, index, uv coordinates, adj
 	int label;
 	float x, y;
 	//int patch;
-	cv::Vec3f color;
-	cv::Vec3f color_ave;
+	Eigen::Vector3f color;
+	Eigen::Vector3f color_ave;
 	std::set<int> adj_vertices;
 
 	SUB_Vertex_info() : v_index(-1), label(-1) {};
@@ -122,7 +122,7 @@ private:
 	VEC_PATCHES_SIZE<TMap> texture_map; // patches location map to texture img.
 	
 	VEC_SUB_VERTICE_SIZE<VInfo> vertex_infos; // sub-vertex color, index, uv coordinates, adjacent vertices
-	VEC_SUB_VERTICE_SIZE<cv::Vec3f> delta_color; // color adjustments for 3 channels.
+	VEC_SUB_VERTICE_SIZE<Eigen::Vector3f> delta_color; // color adjustments for 3 channels.
 
 	VEC_VERTICE_SIZE<std::map<int, int>> sub_vertex_table; //vector::index: vertex, map::key: label, map::value: sub_vertex
 	
@@ -154,11 +154,11 @@ public:
 
 
 	void generate_texture(const Model& model, const std::vector<View> &views, int texture_num,
-		std::vector<cv::Mat>& texture_imgs);
+		std::vector<Image>& texture_imgs);
 }TG;
 
 int labelling(const Model &model, const Adj_face_list &adj_face_list,
 	const std::vector<View>& views, std::vector<int>& labels);
 
 int seamless_texturing(const Model& src_model, const std::vector<View> &views, const Adj_face_list& adj_face_list,
-	const std::vector<int>& labels, Model& rst_model, std::vector<cv::Mat>& texture_imgs);
+	const std::vector<int>& labels, Model& rst_model, std::vector<Image>& texture_imgs);

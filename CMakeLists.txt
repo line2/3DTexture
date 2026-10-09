@@ -16,12 +16,12 @@ endif()
 
 option(3DTEXTURE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(TBB REQUIRED IMPORTED_TARGET tbb)
 
 add_executable(3DTexture
     src/texture.cpp
+    src/image.cpp
     src/helper_impl.cpp
     src/graph.cpp
     src/labelling.cpp
@@ -31,13 +31,11 @@ add_executable(3DTexture
 target_include_directories(3DTexture PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(3DTexture SYSTEM PRIVATE
-    ${OpenCV_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/eigen335
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/mapMAP
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc)
-target_link_libraries(3DTexture PRIVATE
-    ${OpenCV_LIBS}
-    PkgConfig::TBB)
+target_link_libraries(3DTexture PRIVATE PkgConfig::TBB)
 
 if(MSVC)
     target_compile_options(3DTexture PRIVATE /W4 /permissive-)
@@ -53,16 +51,15 @@ if(BUILD_TESTING)
     add_executable(orthographic_projection_test
         tests/orthographic_projection_test.cpp
         src/graph.cpp
-        src/helper_impl.cpp)
+        src/helper_impl.cpp
+        src/image.cpp)
 
     target_include_directories(orthographic_projection_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_include_directories(orthographic_projection_test SYSTEM PRIVATE
-        ${OpenCV_INCLUDE_DIRS}
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/eigen335
+    ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/stb
         ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc)
-    target_link_libraries(orthographic_projection_test PRIVATE ${OpenCV_LIBS})
-
     if(MSVC)
         target_compile_options(orthographic_projection_test PRIVATE /W4 /permissive-)
     else()

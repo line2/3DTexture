@@ -2,8 +2,7 @@
 #include "helper.h"
 
 #include <Eigen/Core>
-#include <opencv2/core.hpp>
-#include <opencv2/imgcodecs.hpp>
+#include "image.h"
 
 #include <cassert>
 #include <filesystem>
@@ -67,9 +66,9 @@ bool test_camera_file_parser()
         return false;
     }
 
-    const cv::Mat image = cv::Mat::zeros(480, 640, CV_8UC3);
-    if (!cv::imwrite((directory / "view.jpg").string(), image)) {
-        std::cerr << "failed to write temporary JPEG\n";
+    const Image image(640, 480);
+    if (!Image::save_png((directory / "view.png").string(), image)) {
+        std::cerr << "failed to write temporary PNG\n";
         return false;
     }
 
@@ -115,7 +114,7 @@ bool test_parallel_ray_occlusion()
     view.projection_type = ProjectionType::Orthographic;
     view.R = Eigen::Matrix3f::Identity();
     view.t = Eigen::Vector3f::Zero();
-    view.img = cv::Mat::zeros(480, 640, CV_8UC3);
+    view.img = Image(640, 480);
     view.orthographic_sx = 100.0f;
     view.orthographic_sy = 100.0f;
     view.orthographic_cx = 320.0f;

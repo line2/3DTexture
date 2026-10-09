@@ -1,8 +1,8 @@
 
-#include <opencv2/opencv.hpp>
 #include <Eigen/Eigen>
 #include <Eigen/Sparse>
 #include <Eigen/IterativeLinearSolvers>
+#include <queue>
 #include <unordered_map>
 
 #include <cerrno>
@@ -57,36 +57,41 @@ int Texture_generator::find_connected_area(const Adj_face_list& adj_face_list, c
 }
 
 
-// for 3 channel color img (CV_8U3C)
-cv::Vec3f get_color(const cv::Mat& img, float x, float y) {
-	int x0 = floor(x), x1 = x0 + 1;
-	int y0 = floor(y), y1 = y0 + 1;
-	if (x0 < 0 || x0 > img.cols || y0 < 0 || y0 > img.rows) {
+// Bilinearly sample a 3-channel 8-bit RGB image.
+Eigen::Vector3f get_color(const Image& img, float x, float y) {
+	const int x0 = static_cast<int>(std::floor(x));
+	const int y0 = static_cast<int>(std::floor(y));
+	const int x1 = x0 + 1;
+	const int y1 = y0 + 1;
+	if (x0 < 0 || x0 > img.width() || y0 < 0 || y0 > img.height()) {
 		LOGW("uv coordinate out of image range. x = %f, y = %f", x, y);
-		return cv::Vec3f(0, 0, 0);
+		return Eigen::Vector3f::Zero();
 	}
-	cv::Vec3f color;
-	if  (x1 <= img.cols - 1 && y1 <= img.rows - 1) {
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(y0, x0)) * (y1 - y) * (x1 - x);
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(y0, x1)) * (y1 - y) * (x - x0);
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(y1, x0)) * (y - y0) * (x1 - x);
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(y1, x1)) * (y - y0) * (x - x0);
+
+	auto to_vector = [](const std::uint8_t* p) {
+		return Eigen::Vector3f(p[0], p[1], p[2]);
+	};
+	Eigen::Vector3f color = Eigen::Vector3f::Zero();
+
+	if (x1 <= img.width() - 1 && y1 <= img.height() - 1) {
+		color += to_vector(img.pixel(x0, y0)) * ((y1 - y) * (x1 - x));
+		color += to_vector(img.pixel(x1, y0)) * ((y1 - y) * (x - x0));
+		color += to_vector(img.pixel(x0, y1)) * ((y - y0) * (x1 - x));
+		color += to_vector(img.pixel(x1, y1)) * ((y - y0) * (x - x0));
 	}
-	else if (x1 > img.cols - 1 && y1 <= img.rows - 1) {
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(y0, img.cols - 1)) * (y1 - y);
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(y1, img.cols - 1)) * (y - y0);
+	else if (x1 > img.width() - 1 && y1 <= img.height() - 1) {
+		color += to_vector(img.pixel(img.width() - 1, y0)) * (y1 - y);
+		color += to_vector(img.pixel(img.width() - 1, y1)) * (y - y0);
 	}
-	else if (x1 <= img.cols - 1 && y1 > img.rows - 1) {
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(img.rows - 1, x0)) * (x1 - x);
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(img.rows - 1, x1)) * (x - x0);
+	else if (x1 <= img.width() - 1 && y1 > img.height() - 1) {
+		color += to_vector(img.pixel(x0, img.height() - 1)) * (x1 - x);
+		color += to_vector(img.pixel(x1, img.height() - 1)) * (x - x0);
 	}
 	else {
-		color += static_cast<cv::Vec3f>(img.at<cv::Vec3b>(img.rows - 1, img.cols - 1));
+		color = to_vector(img.pixel(img.width() - 1, img.height() - 1));
 	}
-
 	return color;
 }
-
 
 void Texture_generator::vertices_prepare(const std::vector<View>& views, const Model& model, const std::vector<int>& label)
 {
@@ -123,7 +128,7 @@ void Texture_generator::vertices_prepare(const std::vector<View>& views, const M
 				//insert vertex color
 				if (label[i] > 0) {
 					const View& view = views[label[i] - 1];
-					const cv::Mat& img = view.img;
+					const Image& img = view.img;
 					const Eigen::Vector2f uv = project_vertex(p, view);
 					current_it->second.x = uv(0);
 					current_it->second.y = uv(1);
@@ -132,7 +137,7 @@ void Texture_generator::vertices_prepare(const std::vector<View>& views, const M
 				else {
 					current_it->second.x = 0;
 					current_it->second.y = 0;
-					current_it->second.color = cv::Vec3f(0, 0, 0);
+					current_it->second.color = Eigen::Vector3f::Zero();
 				}
 			}
 
@@ -176,7 +181,7 @@ if (use_color_average) {
 			continue;
 		}
 		const int &vertex_label = vertex_infos[i].label;
-		cv::Vec3f color_ave = vertex_infos[i].color;
+		Eigen::Vector3f color_ave = vertex_infos[i].color;
 		const std::set<int>& adj_vertices = vertex_infos[i].adj_vertices;
 		float edge_sample_weight = 1;
 		for (auto it = adj_vertices.begin(); it != adj_vertices.end(); ++it) {
@@ -329,9 +334,9 @@ void Texture_generator::color_adjustment_for_vertices(const Model& model, const 
 					T_A.emplace_back(A_rows, j, -1.0f);
 
 					// Load Vector f;
-					const cv::Vec3f& color_label = use_color_average ?
+					const Eigen::Vector3f& color_label = use_color_average ?
 						vertex_infos[i].color_ave : vertex_infos[i].color;
-					const cv::Vec3f& color_label2 = use_color_average ?
+					const Eigen::Vector3f& color_label2 = use_color_average ?
 						vertex_infos[j].color_ave : vertex_infos[j].color;
 					tex_loop(k, 3) {
 						V_f[k].push_back(color_label2(k) - color_label(k));
@@ -379,7 +384,7 @@ void Texture_generator::color_adjustment_for_vertices(const Model& model, const 
 	//output
 	delta_color.resize(g_rows);
 	tex_loop(i, g_rows) {
-		delta_color[i] = cv::Vec3f(g[0][i], g[1][i], g[2][i]);
+		delta_color[i] = Eigen::Vector3f(g[0][i], g[1][i], g[2][i]);
 	}
 }
 
@@ -462,11 +467,11 @@ void Texture_generator::generate_texcoord(const Model& src_model, Model& dst_mod
 
 //color_adjusetment & generate_texture_image
 void Texture_generator::generate_texture(const Model& model, const std::vector<View> &views, int texture_num,
-	std::vector<cv::Mat>& texture_imgs) {
+	std::vector<Image>& texture_imgs) {
 
 	texture_imgs.clear();
 	tex_loop(i, texture_num) {
-		texture_imgs.emplace_back(texture_height, texture_width, CV_8UC3);
+		texture_imgs.emplace_back(texture_width, texture_height);
 	}
 
 	tex_loop(i, connected_areas.size()) {
@@ -479,7 +484,7 @@ void Texture_generator::generate_texture(const Model& model, const std::vector<V
 			// search vertex info & delta_color
 			int v[3];
 			VInfo vinfo[3];
-			cv::Vec3f d_color[3];
+			Eigen::Vector3f d_color[3];
 			tex_loop(k, 3) {
 				v[k] = model.faces[face * 10 + k];
 				const int &index = sub_vertex_table[v[k]].find(label)->second;
@@ -495,13 +500,13 @@ void Texture_generator::generate_texture(const Model& model, const std::vector<V
 				if (maxy < vinfo[k].y) maxy = vinfo[k].y;
 				if (miny > vinfo[k].y) miny = vinfo[k].y;
 			}
-			if (maxx >= views[label - 1].img.cols) continue;// maxx = views[label - 1].img.cols - 1;
+			if (maxx >= views[label - 1].img.width()) continue;// maxx = views[label - 1].img.width() - 1;
 			if (maxx < 0) continue;// maxx = 0;
-			if (maxy >= views[label - 1].img.rows) continue;// maxy = views[label - 1].img.rows - 1;
+			if (maxy >= views[label - 1].img.height()) continue;// maxy = views[label - 1].img.height() - 1;
 			if (maxy < 0) continue;// maxy = 0;
-			if (minx >= views[label - 1].img.cols) continue;// minx = views[label - 1].img.cols - 1;
+			if (minx >= views[label - 1].img.width()) continue;// minx = views[label - 1].img.width() - 1;
 			if (minx < 0) continue;// minx = 0;
-			if (miny >= views[label - 1].img.rows) continue;// miny = views[label - 1].img.rows - 1;
+			if (miny >= views[label - 1].img.height()) continue;// miny = views[label - 1].img.height() - 1;
 			if (miny < 0) continue;// miny = 0;
 
 			// dilate 1 to avoid rendering problems
@@ -622,27 +627,27 @@ void Texture_generator::generate_texture(const Model& model, const std::vector<V
 
 			//4. image copy(in triangle with color changed)
 			{
-				const cv::Mat &view_img = views[label - 1].img;
+				const Image& view_img = views[label - 1].img;
 				const int &x0 = face_bbox[0], &y0 = face_bbox[1];
 				const int &w = face_bbox[2], &h = face_bbox[3];
 				int x1 = x0 + w, y1 = y0 + h;
 
 				const TMap &tmap = texture_map[i];
-				cv::Mat &texture_img = texture_imgs[tmap.texture_page];
+				Image& texture_img = texture_imgs[tmap.texture_page];
 
 				for (int y = y0; y < y1; ++y) {
 					const int &begin = begin_end_vec[y - y0].first;
 					const int &end = begin_end_vec[y - y0].second;
-					const cv::Vec3b *p0 = view_img.ptr<cv::Vec3b>(y);
-					cv::Vec3b* p1 = texture_img.ptr<cv::Vec3b>(tmap.y + y);
+					const std::uint8_t* p0 = view_img.row(y);
+					std::uint8_t* p1 = texture_img.row(tmap.y + y);
 					for (int x = begin; x <= end; ++x) {
-						const cv::Vec3b& pixel0 = p0[x];
-						cv::Vec3b& pixel1 = p1[tmap.x + x];
+						const std::uint8_t* pixel0 = p0 + static_cast<std::size_t>(x) * 3;
+						std::uint8_t* pixel1 = p1 + static_cast<std::size_t>(tmap.x + x) * 3;
 						tex_loop(k, 3) {
 							float c = static_cast<float>(pixel0[k]);
 							c += S[k][0] * x + S[k][1] * y + S[k][3];
 							c = std::min(std::max(c, 0.0f), 255.0f);
-							pixel1[k] = c;
+							pixel1[k] = static_cast<std::uint8_t>(c);
 						}
 					}
 				}

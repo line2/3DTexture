@@ -99,7 +99,7 @@ Directory structure:
 
 ./CMakeLists.txt and ./CMakePresets.json: Linux CMake build.
 
-./scripts/install_dependencies.sh: installs CMake, C++ compiler, pkg-config, OpenCV, and oneTBB for supported Linux package managers.
+./scripts/install_dependencies.sh: installs CMake, C++ compiler, pkg-config, and oneTBB for supported Linux package managers.
 
 ./scripts/build.sh: configures and builds with CMake.
 
@@ -113,12 +113,12 @@ Directory structure:
 
 ./thirdparty: open source libraries on which this project depends.
 		- Eigen: for basic matrix calculation and solving linear equations.
-		- Opencv: linked from the system installation.
+		- stb: JPEG/PNG decoding and PNG writing.
 		- libacc: for 3D occlusion culling.
 		- mapMAP: as an MRF solver (graph cut).
 		- tbb/oneTBB: parallel computing, used by mapMAP.
 
-The Linux build uses the bundled Eigen, libacc, and mapMAP sources from `thirdparty`, while OpenCV and oneTBB are expected from the system package manager.
+The Linux build uses the bundled Eigen, libacc, mapMAP, and stb sources from `thirdparty`; oneTBB is expected from the system package manager. Image loading and PNG writing use stb instead of OpenCV.
 
 ./x64: example EXEs and DLLs.
 

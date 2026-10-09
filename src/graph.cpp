@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <vector>
 #include "texture.h"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -28,8 +30,8 @@ float get_face_area(const Model& model, const std::vector<Eigen::Vector2f>& uvs,
 	tex_loop(i, 3) {
 		const int& vertex = model.faces[10 * face + i];
 		uv[i] = uvs[vertex];
-		if (uv[i][0] >= view.img.cols - 1 || uv[i][0] < 1 ||
-			uv[i][1] >= view.img.rows - 1 || uv[i][1] < 1)
+		if (uv[i][0] >= view.img.width() - 1 || uv[i][0] < 1 ||
+			uv[i][1] >= view.img.height() - 1 || uv[i][1] < 1)
 		{
 			return -1.0f;
 		}
@@ -86,7 +88,6 @@ Eigen::Vector3f get_face_normal(const Model& model, int face)
 #ifdef NEW_LABELLING
 float face_grad_mean_color(const Model& model, const View &view, std::vector<Eigen::Vector2f>& uvs, int face,
 	bool need_mean_color, Eigen::Vector3f& mean_color) {
-	int vertices[3];
 	float maxx = -1, minx = 1e9, maxy = -1, miny = 1e9;
 	tex_loop(i, 3) {
 		const int &vertex = model.faces[10 * face + i];
@@ -96,50 +97,63 @@ float face_grad_mean_color(const Model& model, const View &view, std::vector<Eig
 		if (uv[1] > maxy) maxy = uv[1];
 		if (uv[1] < miny) miny = uv[1];
 	}
-	cv::Rect rect(std::floor(minx), std::floor(miny), std::ceil(maxx) - std::floor(minx), std::ceil(maxy) - std::floor(miny));
-	//std::cout << rect << std::endl;
-	cv::Mat face_img = view.img(rect);
 
-	if (face_img.rows * face_img.cols == 0)return 0.0f;
+	const int x0 = static_cast<int>(std::floor(minx));
+	const int y0 = static_cast<int>(std::floor(miny));
+	const int crop_width = static_cast<int>(std::ceil(maxx)) - x0;
+	const int crop_height = static_cast<int>(std::ceil(maxy)) - y0;
+	if (x0 < 0 || y0 < 0 || crop_width <= 0 || crop_height <= 0 ||
+		x0 + crop_width > view.img.width() || y0 + crop_height > view.img.height()) {
+		return 0.0f;
+	}
+
+	const Image face_img = view.img.crop(x0, y0, crop_width, crop_height);
+	const int pixel_count = face_img.width() * face_img.height();
 
 	if (need_mean_color) {
-		//mean color
-		float r = 0, g = 0, b = 0;
-		tex_loop(i, face_img.rows) {
-			cv::Vec3b* p = face_img.ptr<cv::Vec3b>(i);
-			tex_loop(j, face_img.cols) {
-				b += p[j][0];
-				g += p[j][1];
-				r += p[j][2];
+		float r = 0.0f, g = 0.0f, b = 0.0f;
+		for (int y = 0; y < face_img.height(); ++y) {
+			for (int x = 0; x < face_img.width(); ++x) {
+				const std::uint8_t* p = face_img.pixel(x, y);
+				r += p[0];
+				g += p[1];
+				b += p[2];
 			}
 		}
-		b /= (face_img.rows * face_img.cols);
-		g /= (face_img.rows * face_img.cols);
-		r /= (face_img.rows * face_img.cols);
-
-		mean_color[0] = r;
-		mean_color[1] = g;
-		mean_color[2] = b;
+		mean_color = Eigen::Vector3f(r / pixel_count, g / pixel_count, b / pixel_count);
 	}
 
-	cv::Mat face_img_gray;
-	cv::cvtColor(face_img, face_img_gray, cv::COLOR_BGR2GRAY);
-	cv::Mat grad, grad_x, grad_y;
-	//cv::Mat abs_grad_x, abs_grad_y;
-
-	Sobel(face_img_gray, grad_x, CV_8UC1, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
-	convertScaleAbs(grad_x, grad_x);
-	Sobel(face_img_gray, grad_y, CV_8UC1, 0, 1, 3, 1, 0, cv::BORDER_DEFAULT);
-	convertScaleAbs(grad_y, grad_y);
-	addWeighted(grad_x, 0.5, grad_y, 0.5, 0, grad);
-	float grad_ave = 0;
-	tex_loop(i, grad.rows) {
-		uchar* p = grad.ptr<uchar>(i);
-		tex_loop(j, grad.cols) {
-			grad_ave += static_cast<float>(p[j]);
+	// RGB -> grayscale, followed by a 3x3 Sobel filter.
+	std::vector<std::uint8_t> gray(pixel_count);
+	for (int y = 0; y < face_img.height(); ++y) {
+		for (int x = 0; x < face_img.width(); ++x) {
+			const std::uint8_t* p = face_img.pixel(x, y);
+			const float luminance = 0.299f * p[0] + 0.587f * p[1] + 0.114f * p[2];
+			gray[y * face_img.width() + x] =
+				static_cast<std::uint8_t>(std::min(255.0f, std::max(0.0f, luminance)));
 		}
 	}
-	grad_ave /= (grad.rows * grad.cols);
+
+	auto sample_gray = [&](int x, int y) {
+		x = std::max(0, std::min(face_img.width() - 1, x));
+		y = std::max(0, std::min(face_img.height() - 1, y));
+		return static_cast<int>(gray[y * face_img.width() + x]);
+	};
+
+	float grad_ave = 0.0f;
+	for (int y = 0; y < face_img.height(); ++y) {
+		for (int x = 0; x < face_img.width(); ++x) {
+			const int gx =
+				-sample_gray(x - 1, y - 1) - 2 * sample_gray(x - 1, y) - sample_gray(x - 1, y + 1) +
+				 sample_gray(x + 1, y - 1) + 2 * sample_gray(x + 1, y) + sample_gray(x + 1, y + 1);
+			const int gy =
+				-sample_gray(x - 1, y - 1) - 2 * sample_gray(x, y - 1) - sample_gray(x + 1, y - 1) +
+				 sample_gray(x - 1, y + 1) + 2 * sample_gray(x, y + 1) + sample_gray(x + 1, y + 1);
+			const int magnitude = std::min(255, (std::abs(gx) + std::abs(gy)) / 2);
+			grad_ave += static_cast<float>(magnitude);
+		}
+	}
+	grad_ave /= pixel_count;
 	return grad_ave;
 }
 
