@@ -97,50 +97,44 @@ void Texture_generator::vertices_prepare(const std::vector<View>& views, const M
 		int v[3] = { v0, v1, v2 };
 
 		tex_loop(j, 3) {
-			bool current_label_exist = false;
-			auto vertex_it = info_map.equal_range(v[j]);
 			const Eigen::Vector3f& p = model.vertices[v[j]];
+			auto vertex_it = info_map.equal_range(v[j]);
+			auto current_it = vertex_it.second;
+			bool current_label_exist = false;
+
 			for (auto it = vertex_it.first; it != vertex_it.second; ++it) {
 				if (it->second.label == label[i]) {
+					current_it = it;
 					current_label_exist = true;
-				}
-			}
-			if (!current_label_exist) {
-				info_map.emplace(v[j], VInfo(label[i], v[j]));
-				auto vertex_it = info_map.equal_range(v[j]);
-				for (auto it = vertex_it.first; it != vertex_it.second; ++it) {
-					if (it->second.label == label[i]) {
-
-						//insert vertex color
-						if (label[i] > 0) {
-							const Eigen::Matrix3f& R = views[label[i] - 1].R;
-							const Eigen::Vector3f& t = views[label[i] - 1].t;
-							const Eigen::Matrix3f& K = views[label[i] - 1].K;
-							const cv::Mat& img = views[label[i] - 1].img;
-							Eigen::Vector3f p_cam = R * p + t;
-							Eigen::Vector3f p_img = K * p_cam;
-							p_img /= p_cam(2);
-							it->second.x = p_img(0);
-							it->second.y = p_img(1);
-							it->second.color = get_color(img, p_img(0), p_img(1));
-						}
-						else {
-							it->second.x = 0;
-							it->second.y = 0;
-							it->second.color = cv::Vec3f(0, 0, 0);
-						}
-						break;
-					}
-				}
-			}
-			for (auto it = vertex_it.first; it != vertex_it.second; ++it) {
-				if (it->second.label == label[i]) {
-
-					// insert vertex adj list
-					tex_loop(k, 3) {
-						if(v[k] != v[j]) it->second.adj_vertices.insert(v[k]);
-					}
 					break;
+				}
+			}
+
+			// An unordered_multimap insert may rehash and invalidate the old
+			// equal_range iterators. Keep only the iterator returned by insert.
+			if (!current_label_exist) {
+				current_it = info_map.emplace(v[j], VInfo(label[i], v[j]));
+
+				//insert vertex color
+				if (label[i] > 0) {
+					const View& view = views[label[i] - 1];
+					const cv::Mat& img = view.img;
+					const Eigen::Vector2f uv = project_vertex(p, view);
+					current_it->second.x = uv(0);
+					current_it->second.y = uv(1);
+					current_it->second.color = get_color(img, uv(0), uv(1));
+				}
+				else {
+					current_it->second.x = 0;
+					current_it->second.y = 0;
+					current_it->second.color = cv::Vec3f(0, 0, 0);
+				}
+			}
+
+			// insert vertex adj list
+			tex_loop(k, 3) {
+				if (v[k] != v[j]) {
+					current_it->second.adj_vertices.insert(v[k]);
 				}
 			}
 		}

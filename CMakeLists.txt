@@ -48,5 +48,29 @@ else()
     endif()
 endif()
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(orthographic_projection_test
+        tests/orthographic_projection_test.cpp
+        src/graph.cpp
+        src/helper_impl.cpp)
+
+    target_include_directories(orthographic_projection_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_include_directories(orthographic_projection_test SYSTEM PRIVATE
+        ${OpenCV_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/eigen335
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/libacc)
+    target_link_libraries(orthographic_projection_test PRIVATE ${OpenCV_LIBS})
+
+    if(MSVC)
+        target_compile_options(orthographic_projection_test PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(orthographic_projection_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME OrthographicProjection COMMAND orthographic_projection_test)
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS 3DTexture RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

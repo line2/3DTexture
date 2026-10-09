@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <algorithm>
+#include <limits>
 #include "texture.h"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -46,18 +48,7 @@ void eigen_to_math(Eigen::Vector3f eigen_vec, math::Vec3f& math_vec) {
 // 3D coordinates to 2D(image) coordinates
 Eigen::Vector2f find_uv(const Eigen::Vector3f& vertex, const View& view)
 {
-	const Eigen::Matrix3f& R = view.R;
-	const Eigen::Vector3f& t = view.t;
-	const Eigen::Matrix3f& K = view.K;
-
-	Eigen::Vector3f p_cam = R * vertex + t;
-	Eigen::Vector3f p_img = K * p_cam;
-	p_img /= p_img(2);
-
-	Eigen::Vector2f uv;
-	uv(0) = p_img(0);
-	uv(1) = p_img(1);
-	return uv;
+	return project_vertex(vertex, view);
 }
 
 // calculate all uv coordinates on a certaim view
@@ -161,6 +152,10 @@ int Graph::calculate_data_cost(const Model& model, const std::vector<View>& view
 	float max_area = 0.0f;
 	std::vector<Eigen::Vector3f> view_direction(views_num, Eigen::Vector3f(0.0f, 0.0f, 0.0f));
 	std::vector<math::Vec3f> view_pos(views_num);
+	Eigen::Vector3f bbox_min(std::numeric_limits<float>::infinity(),
+		std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity());
+	Eigen::Vector3f bbox_max(-std::numeric_limits<float>::infinity(),
+		-std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity());
 	typedef acc::BVHTree<unsigned int, math::Vec3f> BVHTree;
 
 	std::vector<unsigned int> bvh_faces(model.faces.size() / 10 * 3);
@@ -175,14 +170,21 @@ int Graph::calculate_data_cost(const Model& model, const std::vector<View>& view
 		bvh_vertices[i][0] = model.vertices[i][0];
 		bvh_vertices[i][1] = model.vertices[i][1];
 		bvh_vertices[i][2] = model.vertices[i][2];
+		bbox_min = bbox_min.cwiseMin(model.vertices[i]);
+		bbox_max = bbox_max.cwiseMax(model.vertices[i]);
 	}
+
+	const float scene_radius = (bbox_max - bbox_min).norm() * 0.5f;
+	const float parallel_ray_epsilon = std::max(
+		std::numeric_limits<float>::epsilon(), scene_radius * 1.0e-4f);
+	const float parallel_ray_length = std::max(1.0f, scene_radius * 2.0f);
 
 	BVHTree bvh_tree(bvh_faces, bvh_vertices);
 	tex_loop(j, views_num) {
-		//view_direction[j] = views[j].R * Eigen::Vector3f(0.0f, 0.0f, 1.0f);
-		view_direction[j] = -Eigen::Vector3f(views[j].R(2, 0),
-			views[j].R(2, 1), views[j].R(2, 2));
-		eigen_to_math(-views[j].R.transpose() * views[j].t, view_pos[j]);
+		view_direction[j] = surface_to_camera_direction(views[j]);
+		if (views[j].projection_type == ProjectionType::Perspective) {
+			eigen_to_math(-views[j].R.transpose() * views[j].t, view_pos[j]);
+		}
 	}
 	std::vector<std::vector<Eigen::Vector2f>> views_uvs(views_num);
 
@@ -204,10 +206,21 @@ int Graph::calculate_data_cost(const Model& model, const std::vector<View>& view
 				BVHTree::Ray ray;
 				ray.origin = samples[k];
 
-				ray.dir = view_pos[j] - ray.origin;
-				ray.tmax = ray.dir.norm();
-				ray.tmin = ray.tmax * 0.0001f;
-				ray.dir.normalize();
+				if (views[j].projection_type == ProjectionType::Perspective) {
+					ray.dir = view_pos[j] - ray.origin;
+					ray.tmax = ray.dir.norm();
+					ray.tmin = ray.tmax * 0.0001f;
+					ray.dir.normalize();
+				}
+				else {
+					// Orthographic visibility uses parallel rays. There is no
+					// finite camera center, so every sample uses the same
+					// direction from the surface towards the camera.
+					eigen_to_math(view_direction[j], ray.dir);
+					ray.dir.normalize();
+					ray.tmax = parallel_ray_length;
+					ray.tmin = parallel_ray_epsilon;
+				}
 
 				BVHTree::Hit hit;
 				if (bvh_tree.intersect(ray, &hit)) {
@@ -241,14 +254,15 @@ int Graph::calculate_data_cost(const Model& model, const std::vector<View>& view
 		}
 #ifdef NEW_LABELLING
 		float C = 1e3;
-		std::vector<Eigen::Vector3f> mean_colors;
+		std::vector<Eigen::Vector3f> mean_colors(views_num,
+			Eigen::Vector3f::Zero());
 		
 		tex_loop(j, views_num)
 		{
 			if (valid_mask[i][j] == 1) {
 				Eigen::Vector3f mean_color = { 0.0f, 0.0f, 0.0f };
 				float grad = face_grad_mean_color(model, views[j], views_uvs[j], i, valid_count > 2, mean_color);
-				mean_colors.push_back(mean_color);
+				mean_colors[j] = mean_color;
 				data_costs[i][j + 1] *= C + grad;
 				if (max_data_cost < data_costs[i][j + 1]) max_data_cost = data_costs[i][j + 1];
 			}

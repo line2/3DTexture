@@ -82,6 +82,7 @@ int read_label_file(std::string filename, std::vector<int>& label) {
 		label.push_back(cur_label);
 	}
 	fin.close();
+	return 0;
 }
 
 // insert a certain edge to edge_map. Output the correspondant face pair if found one. 
@@ -192,26 +193,66 @@ int load_view(std::string path, std::vector<View>& view_list) {
 
         Eigen::Matrix3f& R = view.R;
         Eigen::Vector3f& t = view.t;
-        Eigen::Matrix3f& K = view.K;
 
-        //extrinsic
-        fin >> t(0) >> t(1) >> t(2);
-        fin >> R(0, 0) >> R(0, 1) >> R(0, 2)
+        std::string marker;
+        fin >> marker;
+        if (marker != "ORTHO" && marker != "ORTHOGRAPHIC" &&
+            marker != "PERSP" && marker != "PERSPECTIVE") {
+            // Existing .cam files have no projection marker and start with the
+            // translation. Keep them compatible with the original format.
+            fin.clear();
+            fin.seekg(0, std::ios::beg);
+            marker = "PERSP";
+        }
+
+        const bool orthographic = marker == "ORTHO" || marker == "ORTHOGRAPHIC";
+        view.projection_type = orthographic ?
+            ProjectionType::Orthographic : ProjectionType::Perspective;
+
+        if (!(fin >> t(0) >> t(1) >> t(2))) {
+            LOGE("invalid extrinsic translation in %s", pose_file.string().c_str());
+            view_list.pop_back();
+            return -1;
+        }
+        if (!(fin >> R(0, 0) >> R(0, 1) >> R(0, 2)
             >> R(1, 0) >> R(1, 1) >> R(1, 2)
-            >> R(2, 0) >> R(2, 1) >> R(2, 2);
+            >> R(2, 0) >> R(2, 1) >> R(2, 2))) {
+            LOGE("invalid extrinsic rotation in %s", pose_file.string().c_str());
+            view_list.pop_back();
+            return -1;
+        }
 
-        float f, d0, d1, ppect, cx, cy; //intrinsic
-        fin >> f >> d0 >> d1 >> ppect >> cx >> cy;
+        if (orthographic) {
+            // Pixel units: u = sx * x_cam + cx, v = sy * y_cam + cy.
+            float sx, sy, cx, cy;
+            if (!(fin >> sx >> sy >> cx >> cy) || sx <= 0.0f || sy <= 0.0f) {
+                LOGE("invalid orthographic intrinsics in %s", pose_file.string().c_str());
+                view_list.pop_back();
+                return -1;
+            }
+            view.orthographic_sx = sx;
+            view.orthographic_sy = sy;
+            view.orthographic_cx = cx;
+            view.orthographic_cy = cy;
+        }
+        else {
+            float f, d0, d1, ppect, cx, cy; //intrinsic
+            if (!(fin >> f >> d0 >> d1 >> ppect >> cx >> cy) || f <= 0.0f) {
+                LOGE("invalid perspective intrinsics in %s", pose_file.string().c_str());
+                view_list.pop_back();
+                return -1;
+            }
 
-        // to pixel coodinates
-        f *= std::max(view.img.cols, view.img.rows);
-        cx *= view.img.cols;
-        cy *= view.img.rows;
+            // The original .cam format stores normalized intrinsics.
+            f *= std::max(view.img.cols, view.img.rows);
+            cx *= view.img.cols;
+            cy *= view.img.rows;
 
-        // d0, d1, ppect are not used.
-        K(0, 0) = f; K(0, 1) = 0; K(0, 2) = cx;
-        K(1, 0) = 0; K(1, 1) = f; K(1, 2) = cy;
-        K(2, 0) = 0; K(2, 1) = 0; K(2, 2) = 1;
+            Eigen::Matrix3f& K = view.K;
+            K(0, 0) = f; K(0, 1) = 0; K(0, 2) = cx;
+            K(1, 0) = 0; K(1, 1) = f; K(1, 2) = cy;
+            K(2, 0) = 0; K(2, 1) = 0; K(2, 2) = 1;
+        }
     }
 
     return 0;

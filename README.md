@@ -23,6 +23,39 @@ The executable can also be called directly:
 ./build/Release/3DTexture <mesh.obj> <rgb_cam_dir> <output_dir>
 ```
 
+### Camera projection models
+
+Legacy `.cam` files without a leading marker are parsed as perspective cameras. An explicit perspective marker is also supported:
+
+```text
+PERSP
+tx ty tz
+r00 r01 r02
+r10 r11 r12
+r20 r21 r22
+f d0 d1 ppect cx cy
+```
+
+Orthographic cameras use a leading marker and pixel-unit intrinsics:
+
+```text
+ORTHO
+tx ty tz
+r00 r01 r02
+r10 r11 r12
+r20 r21 r22
+sx sy cx cy
+```
+
+For an orthographic view, projection is:
+
+```text
+u = sx * x_cam + cx
+v = sy * y_cam + cy
+```
+
+Orthographic visibility is evaluated with parallel rays instead of a finite perspective camera center.
+
 Equivalent build/run scripts are kept for Windows, while CMake is now the build orchestrator for Linux.
 
 Directory structure:

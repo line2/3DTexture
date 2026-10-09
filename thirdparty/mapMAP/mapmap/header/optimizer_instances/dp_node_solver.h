@@ -20,7 +20,7 @@ template<typename COSTTYPE, uint_t SIMDWIDTH>
 class DPNodeSolver
 {
 public:
-    ~DPNodeSolver() {};
+    virtual ~DPNodeSolver() = default;
 
     virtual void optimize_node() = 0;
     virtual luint_t scratch_bytes_needed() = 0;
