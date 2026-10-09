@@ -12,7 +12,7 @@ int Texture_generator::find_connected_area(const Adj_face_list& adj_face_list, c
 
 	connected_areas.clear();
 	if (adj_face_list.size() == 0) {
-		LOGE("adj_face_list is empty!");
+		LOGE("%s", "adj_face_list is empty!");
 		return -1;
 	}
 	if (adj_face_list.size() != label.size()) {

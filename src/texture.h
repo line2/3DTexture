@@ -2,8 +2,8 @@
 
 #include "common.h"
 
-#include <opencv2\opencv.hpp>
-#include <Eigen\Eigen>
+#include <opencv2/opencv.hpp>
+#include <Eigen/Eigen>
 #include <vector>
 #include <set>
 #include <unordered_map>
@@ -46,8 +46,8 @@ typedef struct SUB_Vertex_info { // sub-vertex color, index, uv coordinates, adj
 	cv::Vec3f color_ave;
 	std::set<int> adj_vertices;
 
-	SUB_Vertex_info() :label(-1), v_index(-1) {};
-	SUB_Vertex_info(int _label, int _v_index) :label(_label), v_index(_v_index) {};
+	SUB_Vertex_info() : v_index(-1), label(-1) {};
+	SUB_Vertex_info(int _label, int _v_index) : v_index(_v_index), label(_label) {};
 }VInfo;
 
 struct BBox { // patch bounding box
@@ -69,7 +69,7 @@ public:
 	std::vector<bool> b_good_face;
 	std::vector<std::vector<int>> valid_mask;
 
-	Graph::Graph(int _faces_num, int _views_num);
+	Graph(int _faces_num, int _views_num);
 	int calculate_data_cost(const Model& model, const std::vector<View>& views);
 };
 
@@ -95,8 +95,8 @@ public:
 	int patches_num;
 	int sub_vertices_num;
 
-	Texture_generator() :texture_height(1000), texture_width(1000) {}
-	Texture_generator(int _texture_height, int _texture_width):texture_height(_texture_height), texture_width(_texture_width){}
+	Texture_generator() : texture_width(1000), texture_height(1000) {}
+	Texture_generator(int _texture_height, int _texture_width) : texture_width(_texture_width), texture_height(_texture_height) {}
 
 	int find_connected_area(const Adj_face_list& adj_face_list, const std::vector<int>& label);
 

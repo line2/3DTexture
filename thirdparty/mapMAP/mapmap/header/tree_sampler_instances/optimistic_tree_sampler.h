@@ -16,11 +16,11 @@
 
 #include "tbb/concurrent_vector.h"
 
-#include "header/defines.h"
-#include "header/graph.h"
-#include "header/tree.h"
-#include "header/vector_types.h"
-#include "header/tree_sampler.h"
+#include "mapmap/header/defines.h"
+#include "mapmap/header/graph.h"
+#include "mapmap/header/tree.h"
+#include "mapmap/header/vector_types.h"
+#include "mapmap/header/tree_sampler.h"
 
 NS_MAPMAP_BEGIN
 
@@ -90,10 +90,10 @@ protected:
 
     std::unique_ptr<Tree<COSTTYPE>> m_tree;
     std::vector<luint_t> m_rem_degrees;
-    std::vector<tbb::atomic<luint_t>> m_markers;
-    std::vector<tbb::atomic<unsigned char>> m_node_locks;
-    std::vector<tbb::atomic<unsigned char>> m_in_queue;
-    tbb::atomic<luint_t> m_rem_nodes;
+    std::vector<mapmap::atomic<luint_t>> m_markers;
+    std::vector<mapmap::atomic<unsigned char>> m_node_locks;
+    std::vector<mapmap::atomic<unsigned char>> m_in_queue;
+    mapmap::atomic<luint_t> m_rem_nodes;
 };
 
 template<typename COSTTYPE, bool ACYCLIC>
@@ -103,6 +103,6 @@ using OptimisticTreeSampler_ptr =
 NS_MAPMAP_END
 
 /* include function implementations */
-#include "source/tree_sampler_instances/optimistic_tree_sampler.impl.h"
+#include "mapmap/source/tree_sampler_instances/optimistic_tree_sampler.impl.h"
 
 #endif /* __MAPMAP_HEADER_OPTIMISTIC_TREE_SAMPLER_H_ */

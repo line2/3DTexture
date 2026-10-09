@@ -7,7 +7,7 @@
  * of the BSD license. See the LICENSE file for details.
  */
 
-#include "header/multilevel.h"
+#include "mapmap/header/multilevel.h"
 
 #include <stdexcept>
 #include <utility>
@@ -18,12 +18,12 @@
 #include "tbb/parallel_for.h"
 #include "tbb/blocked_range.h"
 #include "tbb/concurrent_vector.h"
-#include "tbb/atomic.h"
+#include "mapmap/compat/atomic.h"
 
-#include "header/parallel_templates.h"
-#include "header/costs.h"
-#include "header/cost_instances/unary_table.h"
-#include "header/cost_instances/pairwise_table.h"
+#include "mapmap/header/parallel_templates.h"
+#include "mapmap/header/costs.h"
+#include "mapmap/header/cost_instances/unary_table.h"
+#include "mapmap/header/cost_instances/pairwise_table.h"
 
 NS_MAPMAP_BEGIN
 
@@ -319,7 +319,7 @@ compute_contiguous_ids(
     tbb::blocked_range<luint_t> supernode_range(0, m_num_supernodes);
 
     /* assign new IDs to all nodes and count supernode sizes */
-    std::vector<tbb::atomic<luint_t>> supernode_sizes(m_num_supernodes, 0);
+    std::vector<mapmap::atomic<luint_t>> supernode_sizes(m_num_supernodes, 0);
     tbb::parallel_for(node_range,
         [&](const tbb::blocked_range<luint_t>& r)
         {

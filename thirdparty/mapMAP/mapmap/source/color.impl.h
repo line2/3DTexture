@@ -7,11 +7,11 @@
  * of the BSD license. See the LICENSE file for details.
  */
 
-#include "header/color.h"
+#include "mapmap/header/color.h"
 
 #include <algorithm>
 
-#include "tbb/atomic.h"
+#include "mapmap/compat/atomic.h"
 #include "tbb/parallel_reduce.h"
 #include "tbb/parallel_for.h"
 #include "tbb/mutex.h"
@@ -69,10 +69,10 @@ color_graph(
     std::iota(conf_in->begin(), conf_in->end(), 0);
 
     /* acc: use max_d as initial number of colors */
-    tbb::atomic<luint_t> k = 1;
+    mapmap::atomic<luint_t> k = 1;
 
     /* use atomics for colors */
-    std::vector<tbb::atomic<luint_t>> atom_colors(n, 0);
+    std::vector<mapmap::atomic<luint_t>> atom_colors(n, 0);
 
     std::vector<char> conf_arrays((k + 1) * conf_in->size());
     while(!conf_in->empty())

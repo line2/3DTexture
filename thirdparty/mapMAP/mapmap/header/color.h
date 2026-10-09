@@ -11,9 +11,9 @@
 #define __MAPMAP_COLOR_H_
 
 #include "tbb/concurrent_vector.h"
-#include "header/defines.h"
+#include "mapmap/header/defines.h"
 
-#include "header/graph.h"
+#include "mapmap/header/graph.h"
 
 NS_MAPMAP_BEGIN
 
@@ -47,6 +47,6 @@ protected:
 
 NS_MAPMAP_END
 
-#include "source/color.impl.h"
+#include "mapmap/source/color.impl.h"
 
 #endif /* __MAPMAP_COLOR_H_ */

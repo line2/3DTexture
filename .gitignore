@@ -1,0 +1,7 @@
+build/
+compile_commands.json
+dataset/*/out/
+*.o
+*.a
+*.so
+*.dylib

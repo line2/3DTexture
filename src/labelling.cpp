@@ -111,7 +111,7 @@ int labelling(const Model &model, const Adj_face_list &adj_face_list,
 	tex_loop(i, graph.faces_num) {
 		int label = map_labels.label_from_offset(i, solution[i]);
 		if (label < 0 || label >= graph.views_num + 1) {
-			LOGE("Incorrect label value");
+			LOGE("%s", "Incorrect label value");
 			return -1;
 		}
 		labels[i] = label;

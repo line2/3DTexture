@@ -6,9 +6,11 @@
 #include <sstream>
 #include <string>
 #include <iostream>
-#include <io.h>
 #include <queue>
 #include <iomanip>
+
+#include <filesystem>
+#include <vector>
 
 
 int read_obj_model(std::string filename, Model& model) {
@@ -143,71 +145,81 @@ int build_adj_list(const Model& model, Adj_face_list& adj_list) {
 }
 
 int load_view(std::string path, std::vector<View>& view_list) {
-	intptr_t handle;
-	_finddata_t findData;
-	handle = _findfirst((path + "/*.jpg").c_str(), &findData);
-	if (handle == -1){
-		LOGE("Image dir is empty!");
-		return -1;
-	}
-	do {
-		if (!(findData.attrib & _A_SUBDIR && strcmp(findData.name, ".") == 0
-			&& strcmp(findData.name, "..") == 0))
-		{
-			std::string img_name = findData.name;
-			size_t pos = img_name.find_last_of(".");
-			std::string appendix = img_name.substr(pos, -1);
-			std::string name = img_name.substr(0, pos);
-			if (appendix == ".jpg") {
-				std::string pose_name = path + "/" + name + ".cam";
-				std::ifstream fin(pose_name, std::ios::in);
-				if (!fin.good()) {
-					LOGW("image %s has no pose file.", img_name);
-				}
-				else {
-					view_list.push_back(View());
-					View& view = view_list[view_list.size() - 1];
-					view.img = cv::imread(path + "/" + img_name);
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (!fs::is_directory(path, ec)) {
+        LOGE("Image dir %s does not exist!", path.c_str());
+        return -1;
+    }
 
-					Eigen::Matrix3f& R = view.R;
-					Eigen::Vector3f& t = view.t;
-					Eigen::Matrix3f& K = view.K;
+    std::vector<fs::path> image_files;
+    for (const fs::directory_entry& entry : fs::directory_iterator(path, ec)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        const fs::path& file = entry.path();
+        std::string extension = file.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (extension == ".jpg" || extension == ".jpeg") {
+            image_files.push_back(file);
+        }
+    }
+    std::sort(image_files.begin(), image_files.end());
 
-					//extrinsic
-					fin >> t(0) >> t(1) >> t(2);
-					fin >> R(0, 0) >> R(0, 1) >> R(0, 2)
-						>> R(1, 0) >> R(1, 1) >> R(1, 2)
-						>> R(2, 0) >> R(2, 1) >> R(2, 2);
+    if (image_files.empty()) {
+        LOGE("%s", "Image dir is empty!");
+        return -1;
+    }
 
-					float f, d0, d1, ppect, cx, cy; //intrinsic
-					fin >> f >> d0 >> d1 >> ppect >> cx >> cy;
+    for (const fs::path& image_file : image_files) {
+        fs::path pose_file = image_file;
+        pose_file.replace_extension(".cam");
+        std::ifstream fin(pose_file, std::ios::in);
+        if (!fin.good()) {
+            LOGW("image %s has no pose file.", image_file.filename().string().c_str());
+            continue;
+        }
 
-					// to pixel coodinates
-					f *= std::max(view.img.cols, view.img.rows);
-					cx *= view.img.cols;
-					cy *= view.img.rows;
-					
-					// d0, d1, ppect are not used.
-					K(0, 0) = f; K(0, 1) = 0; K(0, 2) = cx;
-					K(1, 0) = 0; K(1, 1) = f; K(1, 2) = cy;
-					K(2, 0) = 0; K(2, 1) = 0; K(2, 2) = 1;
+        view_list.push_back(View());
+        View& view = view_list.back();
+        view.img = cv::imread(image_file.string());
+        if (view.img.empty()) {
+            LOGE("failed to read image %s", image_file.string().c_str());
+            view_list.pop_back();
+            continue;
+        }
 
-					fin.close();
-				}
+        Eigen::Matrix3f& R = view.R;
+        Eigen::Vector3f& t = view.t;
+        Eigen::Matrix3f& K = view.K;
 
-			}
-		}
-	} while (_findnext(handle, &findData) == 0);
+        //extrinsic
+        fin >> t(0) >> t(1) >> t(2);
+        fin >> R(0, 0) >> R(0, 1) >> R(0, 2)
+            >> R(1, 0) >> R(1, 1) >> R(1, 2)
+            >> R(2, 0) >> R(2, 1) >> R(2, 2);
 
-	_findclose(handle);
-	return 0;
+        float f, d0, d1, ppect, cx, cy; //intrinsic
+        fin >> f >> d0 >> d1 >> ppect >> cx >> cy;
+
+        // to pixel coodinates
+        f *= std::max(view.img.cols, view.img.rows);
+        cx *= view.img.cols;
+        cy *= view.img.rows;
+
+        // d0, d1, ppect are not used.
+        K(0, 0) = f; K(0, 1) = 0; K(0, 2) = cx;
+        K(1, 0) = 0; K(1, 1) = f; K(1, 2) = cy;
+        K(2, 0) = 0; K(2, 1) = 0; K(2, 2) = 1;
+    }
+
+    return 0;
 }
-
-
 int write_obj(std::string filename, const Model& model, int page_num) {
 	std::ofstream out(filename.c_str(), std::ios::out);
 	if (!out.good()) {
-		LOGE("fail to open %s", filename);
+		LOGE("fail to open %s", filename.c_str());
 		return -1;
 	}
 	const std::vector<Eigen::Vector3f>& vertices = model.vertices;
@@ -235,7 +247,7 @@ int write_obj(std::string filename, const Model& model, int page_num) {
 		const int &page = faces[ii + 9];
 		pages[page].push_back(ii);
 	}
-	LOGI("Total texture pages: %d", pages.size());
+	LOGI("Total texture pages: %zu", pages.size());
 
 	tex_loop(p, pages.size()) {
 		
@@ -286,13 +298,13 @@ void write_pile(std::string filename, std::string filename_labeling, Model mesh,
 
 	std::ofstream out(filename.c_str(), std::ios::binary);
 	if (!out.good()) {
-		LOGE("piling failed");
+		LOGE("%s", "piling failed");
 		return;
 	}
 
 	std::ofstream out_label(filename_labeling.c_str(), std::ios::binary);
 	if (!out_label.good()) {
-		LOGE("piling failed");
+		LOGE("%s", "piling failed");
 		return;
 	}
 

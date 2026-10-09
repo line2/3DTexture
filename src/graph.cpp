@@ -130,7 +130,7 @@ float face_grad_mean_color(const Model& model, const View &view, std::vector<Eig
 	}
 
 	cv::Mat face_img_gray;
-	cv::cvtColor(face_img, face_img_gray, CV_BGR2GRAY);
+	cv::cvtColor(face_img, face_img_gray, cv::COLOR_BGR2GRAY);
 	cv::Mat grad, grad_x, grad_y;
 	//cv::Mat abs_grad_x, abs_grad_y;
 

@@ -2,24 +2,53 @@
 
 This code is an implementation of "Let There Be Color! Large-Scale Texturing of 3D Reconstructions"(ECCV2014).
 
-This project can only run on Windows platform. To do this, you just need to run "run.bat". This will run the example exe in ./x64/Release.
+The project now supports Linux through CMake. On a Linux host, install the required packages and build with:
 
-If you want to compile the code, There's a VS2017 project in it.
+```bash
+./scripts/install_dependencies.sh
+cmake --preset linux-release
+cmake --build --preset linux-release
+./run.sh
+```
+
+`run.sh` builds the Release executable if necessary and processes the default TUM example dataset. To process another bundled dataset:
+
+```bash
+./run.sh dataset/rgbd_dataset_freiburg1_room
+```
+
+The executable can also be called directly:
+
+```bash
+./build/Release/3DTexture <mesh.obj> <rgb_cam_dir> <output_dir>
+```
+
+Equivalent build/run scripts are kept for Windows, while CMake is now the build orchestrator for Linux.
 
 Directory structure:
 
-./3Dtexture: VS project.
+./CMakeLists.txt and ./CMakePresets.json: Linux CMake build.
 
-./dataset: test data. For now, there is only one set of data available. The mesh, rgb images and pose files were generated with one set of TUM datasets.
+./scripts/install_dependencies.sh: installs CMake, C++ compiler, pkg-config, OpenCV, and oneTBB for supported Linux package managers.
 
-./sre: main source code of this project.
+./scripts/build.sh: configures and builds with CMake.
+
+./run.sh: builds and runs the default dataset.
+
+./3Dtexture: legacy Visual Studio project.
+
+./dataset: bundled TUM test datasets containing meshes, RGB images, and camera pose files.
+
+./src: main source code of this project.
 
 ./thirdparty: open source libraries on which this project depends.
 		- Eigen: for basic matrix calculation and solving linear equations.
-		- Opencv: for storing images.
+		- Opencv: linked from the system installation.
 		- libacc: for 3D occlusion culling.
-		- mapMAP: as a MRF solver (graph cut).
-		- tbb: parallel computing, used by mapMAP.
+		- mapMAP: as an MRF solver (graph cut).
+		- tbb/oneTBB: parallel computing, used by mapMAP.
+
+The Linux build uses the bundled Eigen, libacc, and mapMAP sources from `thirdparty`, while OpenCV and oneTBB are expected from the system package manager.
 
 ./x64: example EXEs and DLLs.
 

@@ -7,16 +7,17 @@
  * of the BSD license. See the LICENSE file for details.
  */
 
-#include "header/multilevel_instances/group_same_label.h"
+#include "mapmap/header/multilevel_instances/group_same_label.h"
 
 #include <algorithm>
 #include <queue>
+#include <random>
 #include <iostream>
 
-#include "tbb/atomic.h"
+#include "mapmap/compat/atomic.h"
 #include "tbb/blocked_range.h"
 #include "tbb/parallel_for.h"
-#include "tbb/parallel_do.h"
+#include "tbb/parallel_for_each.h"
 
 NS_MAPMAP_BEGIN
 
@@ -56,18 +57,18 @@ group_nodes(
     tbb::blocked_range<luint_t> node_range(0, num_nodes);
 
     /* use atomic locks for synchronizing access to nodes */
-    std::vector<tbb::atomic<char>> node_locks(num_nodes, 0u);
+    std::vector<mapmap::atomic<char>> node_locks(num_nodes, 0u);
     node_in_group.resize(num_nodes);
     std::fill(node_in_group.begin(), node_in_group.end(), invalid_luint_t);
 
     /* create seed "queue" */
     std::vector<luint_t> qu(num_nodes);
     std::iota(std::begin(qu), std::end(qu), 0);
-    std::random_shuffle(qu.begin(), qu.end());
+    std::shuffle(qu.begin(), qu.end(), std::mt19937(std::random_device{}()));
 
 
     /* do BFSes from randomly selected seeds */
-    tbb::parallel_do(qu.begin(), qu.end(),
+    tbb::parallel_for_each(qu.begin(), qu.end(),
         [&](const luint_t& seed)
         {
             /* retrieve label common to this group */

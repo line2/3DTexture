@@ -7,9 +7,9 @@
  * of the BSD license. See the LICENSE file for details.
  */
 
-#include "header/tree_sampler_instances/lock_free_tree_sampler.h"
+#include "mapmap/header/tree_sampler_instances/lock_free_tree_sampler.h"
 
-#include "header/color.h"
+#include "mapmap/header/color.h"
 
 #include <random>
 #include <set>
@@ -591,7 +591,7 @@ LockFreeTreeSampler<COSTTYPE, ACYCLIC>::
 sample_rescue()
 {
     /* find nodes with marker 0 of the same color */
-    tbb::atomic<luint_t> rescue_color = invalid_luint_t;
+    mapmap::atomic<luint_t> rescue_color = invalid_luint_t;
     m_new_size = 0;
 
     tbb::blocked_range<luint_t> node_range(0, this->m_graph->num_nodes());
