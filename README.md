@@ -56,6 +56,19 @@ v = sy * y_cam + cy
 
 Orthographic visibility is evaluated with parallel rays instead of a finite perspective camera center.
 
+### Color adjustment tuning
+
+The seamless color solver exposes two runtime options:
+
+```bash
+3DTEXTURE_COLOR_LAMBDA=0.3
+3DTEXTURE_COLOR_AVERAGE=0
+```
+
+`3DTEXTURE_COLOR_LAMBDA` controls the smoothness weight. Larger values favor smoother adjustments; smaller values enforce stronger seam agreement. `3DTEXTURE_COLOR_AVERAGE=0` uses the direct projected vertex color instead of the sampled edge average. On the bundled orthographic test, `0.3` and direct vertex colors produced the most consistent seams.
+
+Both variables are optional; the defaults remain `0.1` and edge averaging enabled.
+
 Equivalent build/run scripts are kept for Windows, while CMake is now the build orchestrator for Linux.
 
 Directory structure:

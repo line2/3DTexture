@@ -5,6 +5,11 @@
 #include <Eigen/IterativeLinearSolvers>
 #include <unordered_map>
 
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+
 #include "texture.h"
 
 // find connected faces which are of the same label
@@ -161,7 +166,7 @@ void Texture_generator::vertices_prepare(const std::vector<View>& views, const M
 		++index;
 	}
 	
-#ifdef NEW_SEAMLESS
+if (use_color_average) {
 	// use weighted average color as vertex color
 	tex_loop(i, vertex_infos.size()) {
 		const int &v_index = vertex_infos[i].v_index;
@@ -201,7 +206,7 @@ void Texture_generator::vertices_prepare(const std::vector<View>& views, const M
 		color_ave /= edge_sample_weight;
 		vertex_infos[i].color_ave = color_ave;
 	}
-#endif
+}
 
 }
 
@@ -236,13 +241,45 @@ void Texture_generator::calculate_bboxes(const Model& model) {
 }
 
 
+void Texture_generator::configure_color_adjustment() {
+	if (const char* lambda_value = std::getenv("3DTEXTURE_COLOR_LAMBDA")) {
+		errno = 0;
+		char* end = nullptr;
+		const float parsed = std::strtof(lambda_value, &end);
+		if (errno == 0 && end != lambda_value && *end == '\0' &&
+			std::isfinite(parsed) && parsed >= 0.0f) {
+			color_lambda = parsed;
+		}
+		else {
+			LOGW("invalid 3DTEXTURE_COLOR_LAMBDA value: %s", lambda_value);
+		}
+	}
+
+	if (const char* average_value = std::getenv("3DTEXTURE_COLOR_AVERAGE")) {
+		if (std::strcmp(average_value, "0") == 0 ||
+			std::strcmp(average_value, "false") == 0 ||
+			std::strcmp(average_value, "no") == 0 ||
+			std::strcmp(average_value, "off") == 0) {
+			use_color_average = false;
+		}
+		else if (std::strcmp(average_value, "1") == 0 ||
+			std::strcmp(average_value, "true") == 0 ||
+			std::strcmp(average_value, "yes") == 0 ||
+			std::strcmp(average_value, "on") == 0) {
+			use_color_average = true;
+		}
+		else {
+			LOGW("invalid 3DTEXTURE_COLOR_AVERAGE value: %s", average_value);
+		}
+	}
+}
+
 void Texture_generator::color_adjustment_for_vertices(const Model& model, const std::vector<View>& views) {
 
 	delta_color.clear();
 
 	//prepare g_rows indices
-	float lambda = 0.1f;
-
+	const float lambda = color_lambda;
 	int g_rows = sub_vertices_num;
 	std::vector<Eigen::Triplet<double>> T_Gamma;
 	int Gamma_rows = 0;
@@ -278,13 +315,10 @@ void Texture_generator::color_adjustment_for_vertices(const Model& model, const 
 					T_A.emplace_back(A_rows, j, -1.0f);
 
 					// Load Vector f;
-#ifdef NEW_SEAMLESS
-					const cv::Vec3f &color_label = vertex_infos[i].color_ave;
-					const cv::Vec3f &color_label2 = vertex_infos[j].color_ave;
-#else
-					const cv::Vec3f &color_label = vertex_infos[i].color;
-					const cv::Vec3f &color_label2 = vertex_infos[j].color;
-#endif
+					const cv::Vec3f& color_label = use_color_average ?
+						vertex_infos[i].color_ave : vertex_infos[i].color;
+					const cv::Vec3f& color_label2 = use_color_average ?
+						vertex_infos[j].color_ave : vertex_infos[j].color;
 					tex_loop(k, 3) {
 						V_f[k].push_back(color_label2(k) - color_label(k));
 					}

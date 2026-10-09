@@ -115,6 +115,8 @@ typedef class Texture_generator{
 private:
 	int texture_width;
 	int texture_height;
+	float color_lambda = 0.1f;
+	bool use_color_average = true;
 	VEC_PATCHES_SIZE<CArea> connected_areas; // connected areas(faces) of the same label. correspond to patches(img).
 	VEC_PATCHES_SIZE<BBox> patch_bboxes; // image patches' bounding boxes
 	VEC_PATCHES_SIZE<TMap> texture_map; // patches location map to texture img.
@@ -127,6 +129,8 @@ private:
 public:
 	int patches_num;
 	int sub_vertices_num;
+
+	void configure_color_adjustment();
 
 	Texture_generator() : texture_width(1000), texture_height(1000) {}
 	Texture_generator(int _texture_height, int _texture_width) : texture_width(_texture_width), texture_height(_texture_height) {}

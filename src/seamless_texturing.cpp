@@ -4,6 +4,7 @@ int seamless_texturing(const Model& src_model, const std::vector<View> &views, c
 	const std::vector<int>& labels, Model& rst_model, std::vector<cv::Mat>& texture_imgs)
 {
 	TG tg; // texture_generator
+	tg.configure_color_adjustment();
 	tg.find_connected_area(adj_list, labels);
 
 	tg.vertices_prepare(views, src_model, labels);
