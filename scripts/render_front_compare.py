@@ -350,13 +350,16 @@ def render_asset(
                 (poly.n_points, 2), dtype=np.float32
             )
 
+        # PyVista still combines ambient and diffuse even when lighting is
+        # disabled.  Keep ambient at full strength and diffuse at zero so the
+        # renderer outputs the raw base-color texture without double counting.
         plotter.add_mesh(
             poly,
             texture=texture,
             lighting=False,
             pbr=False,
             ambient=1.0,
-            diffuse=1.0,
+            diffuse=0.0,
             specular=0.0,
             opacity=1.0,
             smooth_shading=False,
