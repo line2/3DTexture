@@ -146,6 +146,9 @@ Useful options:
 The optional renderer dependencies are installed into `.venv-pyvista` and reuse
 the system VTK installation.  They do not affect the C++ build or runtime.
 
+For full usage, output, color, camera, metric, and troubleshooting details, see
+[docs/pyvista-front-view-comparison.md](docs/pyvista-front-view-comparison.md).
+
 ### Legacy positional CLI
 
 The original positional interface remains available:
@@ -392,6 +395,7 @@ The optional Python environment is created by
 ```text
 CMakeLists.txt              CMake build description
 CMakePresets.json           Linux debug/release presets
+docs/                       PyVista comparison documentation
 scripts/                    Install, build, run, eval_6cases, and PyVista compare scripts
 src/                        C++ implementation
 tests/                      Unit and integration tests
