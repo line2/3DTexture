@@ -2,8 +2,9 @@
 
 This repository contains a C++ implementation of
 **"Let There Be Color! Large-Scale Texturing of 3D Reconstructions"** (ECCV 2014).
-The maintained build is Linux + CMake and the executable is pure C++. It does not
-depend on OpenCV, Open3D, Python, or uv.
+The maintained Linux + CMake build and executable are pure C++ and do not depend
+on OpenCV, Open3D, Python, or uv.  An optional Python/PyVista renderer is
+provided only for visual comparison.
 
 ## Current status
 
@@ -99,6 +100,51 @@ or:
 
 The script extracts the archive to a temporary directory, discovers all case
 directories, runs the pipeline, and writes `summary.json`.
+
+### Optional PyVista front-view comparison
+
+The C++ pipeline remains Python-free.  For visual inspection, a separate
+PyVista renderer can compare the original textured GLB with the generated
+OBJ/MTL/texture output using the same front-view orthographic camera.
+
+Install the optional renderer environment:
+
+```bash
+./scripts/install_pyvista_renderer.sh
+```
+
+Run the comparison:
+
+```bash
+./scripts/compare_eval6_front.sh /mnt/c/Users/JdSc-local/Downloads/eval_6cases.zip /home/jdsc-local/tmp/3dtexture-eval6-full
+```
+
+The wrapper creates:
+
+```text
+<results>/front_compare/<case>_front_original.png
+<results>/front_compare/<case>_front_result.png
+<results>/front_compare/<case>_front.png
+<results>/front_compare/contact.png
+<results>/front_compare/summary.json
+```
+
+Each side is rendered at 1024x1024 with the same strict orthographic camera,
+the same world scale, lighting disabled, and only base-color textures.  The
+original GLB is normalized to the same height-1 render space used by the
+pipeline before comparison.  Normal, metallic, roughness, emissive, and other
+PBR maps are intentionally ignored.
+
+Useful options:
+
+```bash
+./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --case CASE_ID
+./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --diff
+./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --size 2048
+```
+
+The optional renderer dependencies are installed into `.venv-pyvista` and reuse
+the system VTK installation.  They do not affect the C++ build or runtime.
 
 ### Legacy positional CLI
 
@@ -331,12 +377,22 @@ Bundled dependencies:
 
 There is no OpenCV or Open3D dependency.
 
+Optional visual-comparison dependencies:
+
+- Python 3.10 or newer
+- System VTK (`python3-vtk` on Ubuntu)
+- PyVista, trimesh, pygltflib, NumPy, Pillow
+- `xvfb-run` when rendering on a headless Linux system
+
+The optional Python environment is created by
+`scripts/install_pyvista_renderer.sh` and is not required by the C++ pipeline.
+
 ## Directory layout
 
 ```text
 CMakeLists.txt              CMake build description
 CMakePresets.json           Linux debug/release presets
-scripts/                    Install, build, run, and eval_6cases scripts
+scripts/                    Install, build, run, eval_6cases, and PyVista compare scripts
 src/                        C++ implementation
 tests/                      Unit and integration tests
 thirdparty/                 Bundled C++ dependencies

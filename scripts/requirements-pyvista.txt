@@ -1,0 +1,13 @@
+# Runtime dependencies for the optional PyVista front-view comparison tool.
+# PyVista itself is installed separately with --no-deps so the script can reuse
+# the system VTK installation instead of downloading a second VTK wheel.
+cyclopts>=4.0
+matplotlib>=3.0.1
+numpy>=1.21
+pillow
+pooch
+pyvista-validation>=0.2.2
+scooby>=0.5.1
+trimesh==5.1.1
+pygltflib==1.16.5
+typing-extensions>=4.10
