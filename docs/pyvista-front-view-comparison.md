@@ -199,6 +199,74 @@ rank_000/controls/render_manifest.json
 
 ---
 
+### 4.6 Generate novel views
+
+To render multiple new views that do **not** overlap the original selected
+views:
+
+```bash
+./scripts/compare_eval6_front.sh \
+    DATASET \
+    RESULTS \
+    OUTPUT \
+    --novel-views 8
+```
+
+This renders 8 additional viewpoints per case.
+
+The tool reads the original selected views from:
+
+```text
+rank_000/controls/selected_views.json
+rank_001/controls/selected_views.json
+rank_002/controls/selected_views.json
+rank_003/controls/selected_views.json
+```
+
+It then generates evenly distributed novel viewpoints on the sphere and avoids
+the original viewpoints by at least:
+
+```text
+--novel-min-angle 12
+```
+
+You can change the separation:
+
+```bash
+--novel-min-angle 20
+```
+
+Example with 12 novel views and a 20-degree separation:
+
+```bash
+./scripts/compare_eval6_front.sh \
+    DATASET \
+    RESULTS \
+    OUTPUT \
+    --novel-views 12 \
+    --novel-min-angle 20
+```
+
+Novel view images are named:
+
+```text
+<case>_novel_00.png
+<case>_novel_01.png
+<case>_novel_02.png
+...
+```
+
+Each novel view still renders both:
+
+```text
+Original GLB | 3DTexture
+```
+
+The selected azimuth and elevation for every novel view are recorded in
+`summary.json`.
+
+---
+
 ## 5. Output files
 
 For each case, the tool writes:
@@ -244,10 +312,13 @@ Records:
 - results path
 - output path
 - view name
+- view count
+- unique case count
 - resolution
 - color mode
 - whether lighting and PBR maps are disabled
-- per-case output paths
+- novel view count and minimum separation
+- per-view output paths
 - MAE, RMSE, and PSNR
 
 Example:
@@ -468,4 +539,10 @@ With difference image:
 
 ```bash
 ./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --diff
+```
+
+With 8 novel views:
+
+```bash
+./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --novel-views 8
 ```

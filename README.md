@@ -141,7 +141,12 @@ Useful options:
 ./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --case CASE_ID
 ./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --diff
 ./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --size 2048
+./scripts/compare_eval6_front.sh DATASET RESULTS OUTPUT --novel-views 8
 ```
+
+`--novel-views N` generates N evenly distributed viewpoints per case and avoids
+the original selected viewpoints.  The minimum separation defaults to 12 degrees
+and can be changed with `--novel-min-angle`.
 
 The optional renderer dependencies are installed into `.venv-pyvista` and reuse
 the system VTK installation.  They do not affect the C++ build or runtime.

@@ -35,6 +35,61 @@ class ViewCamera:
     ortho_scale: float
 
 
+@dataclass(frozen=True)
+class ViewSpec:
+    label: str
+    azimuth: float
+    elevation: float
+    camera: ViewCamera
+
+
+def spherical_direction(azimuth_deg: float, elevation_deg: float) -> np.ndarray:
+    """Return the camera-backward direction for an azimuth/elevation pair."""
+    azimuth = math.radians(azimuth_deg)
+    elevation = math.radians(elevation_deg)
+    return np.array(
+        [
+            math.cos(elevation) * math.cos(azimuth),
+            math.cos(elevation) * math.sin(azimuth),
+            math.sin(elevation),
+        ],
+        dtype=np.float64,
+    )
+
+
+def direction_to_camera(
+    direction: np.ndarray, distance: float, ortho_scale: float
+) -> ViewCamera:
+    """Build an orthographic camera from a view direction."""
+    backward = np.asarray(direction, dtype=np.float64)
+    backward /= np.linalg.norm(backward)
+
+    world_up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    if abs(float(np.dot(backward, world_up))) > 0.999:
+        world_up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+
+    right = np.cross(world_up, backward)
+    right /= np.linalg.norm(right)
+    up = np.cross(backward, right)
+    up /= np.linalg.norm(up)
+    position = backward * distance
+
+    return ViewCamera(
+        right=right,
+        up=up,
+        backward=backward,
+        position=position,
+        distance=distance,
+        ortho_scale=ortho_scale,
+    )
+
+
+def angular_distance_degrees(a: np.ndarray, b: np.ndarray) -> float:
+    cosine = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    cosine = max(-1.0, min(1.0, cosine))
+    return math.degrees(math.acos(cosine))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render original GLB and generated OBJ front views side by side."
@@ -75,6 +130,18 @@ def parse_args() -> argparse.Namespace:
         "--diff",
         action="store_true",
         help="Additionally write a 4x amplified RGB difference image",
+    )
+    parser.add_argument(
+        "--novel-views",
+        type=int,
+        default=0,
+        help="Generate N evenly distributed views that avoid the original selected views",
+    )
+    parser.add_argument(
+        "--novel-min-angle",
+        type=float,
+        default=12.0,
+        help="Minimum angular separation from original views in degrees (default: 12)",
     )
     return parser.parse_args()
 
@@ -145,7 +212,7 @@ class DatasetSource:
             scene = trimesh.Scene(scene)
         return scene
 
-    def load_view_camera(self, case_id: str, view_name: str) -> ViewCamera:
+    def load_view_camera(self, case_id: str, view_name: str) -> ViewSpec:
         manifest_data = self.read_bytes(
             f"{case_id}/rank_000/controls/render_manifest.json"
         )
@@ -168,8 +235,10 @@ class DatasetSource:
         position = matrix[:3, 3]
         distance = float(manifest.get("camera_fit", {}).get("distance", 2.2))
         ortho_scale = float(view.get("render_ortho_scale", 1.0))
+        azimuth = float(view.get("azimuth", view.get("camera_azimuth", 0.0)))
+        elevation = float(view.get("elevation", 0.0))
 
-        return ViewCamera(
+        camera = ViewCamera(
             right=right,
             up=up,
             backward=backward,
@@ -177,6 +246,107 @@ class DatasetSource:
             distance=distance,
             ortho_scale=ortho_scale,
         )
+        return ViewSpec(
+            label=str(view.get("label", view_name)),
+            azimuth=azimuth,
+            elevation=elevation,
+            camera=camera,
+        )
+
+    def load_original_view_directions(self, case_id: str) -> list[tuple[float, float]]:
+        directions: list[tuple[float, float]] = []
+        for rank in range(4):
+            path = f"{case_id}/rank_{rank:03d}/controls/selected_views.json"
+            try:
+                data = self.read_bytes(path)
+            except FileNotFoundError:
+                continue
+            views = json.loads(data)
+            for view in views:
+                azimuth = view.get("azimuth_deg")
+                elevation = view.get("elevation_deg")
+                if azimuth is None or elevation is None:
+                    continue
+                directions.append((float(azimuth), float(elevation)))
+        return directions
+
+
+def generate_novel_views(
+    original_directions: Sequence[tuple[float, float]],
+    count: int,
+    min_angle_deg: float,
+    distance: float,
+    ortho_scale: float,
+) -> list[ViewSpec]:
+    """Generate views that do not overlap the original selected views."""
+    if count <= 0:
+        return []
+
+    original_vectors = [
+        spherical_direction(azimuth, elevation)
+        for azimuth, elevation in original_directions
+    ]
+
+    candidate_count = 256
+    golden = math.pi * (3.0 - math.sqrt(5.0))
+    candidates: list[np.ndarray] = []
+    for index in range(candidate_count):
+        z = 1.0 - (2.0 * (index + 0.5) / candidate_count)
+        radius = math.sqrt(max(0.0, 1.0 - z * z))
+        theta = golden * index
+        candidates.append(
+            np.array(
+                [math.cos(theta) * radius, math.sin(theta) * radius, z],
+                dtype=np.float64,
+            )
+        )
+
+    eligible = [
+        candidate
+        for candidate in candidates
+        if all(
+            angular_distance_degrees(candidate, original) >= min_angle_deg
+            for original in original_vectors
+        )
+    ]
+    if not eligible:
+        eligible = candidates
+
+    selected: list[np.ndarray] = []
+    while len(selected) < count and eligible:
+        best_candidate = None
+        best_score = -1.0
+        for candidate in eligible:
+            distances = [
+                angular_distance_degrees(candidate, original)
+                for original in original_vectors
+            ]
+            distances.extend(
+                angular_distance_degrees(candidate, chosen) for chosen in selected
+            )
+            score = min(distances)
+            if score > best_score:
+                best_score = score
+                best_candidate = candidate
+        if best_candidate is None:
+            break
+        selected.append(best_candidate)
+        eligible = [candidate for candidate in eligible if candidate is not best_candidate]
+
+    specs: list[ViewSpec] = []
+    for index, direction in enumerate(selected):
+        azimuth = math.degrees(math.atan2(float(direction[1]), float(direction[0])))
+        elevation = math.degrees(math.asin(float(direction[2])))
+        camera = direction_to_camera(direction, distance, ortho_scale)
+        specs.append(
+            ViewSpec(
+                label=f"novel_{index:02d}",
+                azimuth=azimuth,
+                elevation=elevation,
+                camera=camera,
+            )
+        )
+    return specs
 
 
 def load_original_meshes(scene: trimesh.Scene) -> list[trimesh.Trimesh]:
@@ -481,6 +651,10 @@ def main() -> int:
     args = parse_args()
     if args.size < 1:
         raise ValueError("--size must be a positive integer")
+    if args.novel_views < 0:
+        raise ValueError("--novel-views must be non-negative")
+    if args.novel_min_angle <= 0:
+        raise ValueError("--novel-min-angle must be positive")
 
     dataset_path = resolve_path(args.dataset)
     results_root = resolve_path(args.results)
@@ -499,58 +673,84 @@ def main() -> int:
 
     try:
         for case_id in case_ids:
-            case_output: dict[str, Any] = {
-                "id": case_id,
-                "success": False,
-                "view": args.view,
-                "resolution": args.size,
-            }
-            try:
-                result_obj = results_root / case_id / "result.obj"
-                if not result_obj.is_file():
-                    raise FileNotFoundError(f"Missing result OBJ: {result_obj}")
-
-                camera = dataset.load_view_camera(case_id, args.view)
-                original_scene = dataset.load_original_scene(case_id)
-                original_meshes = load_original_meshes(original_scene)
-                result_meshes = load_result_meshes(result_obj)
-
-                original_image = render_asset(original_meshes, camera, args.size)
-                result_image = render_asset(result_meshes, camera, args.size)
-
-                original_path = output_root / f"{case_id}_{args.view}_original.png"
-                result_path = output_root / f"{case_id}_{args.view}_result.png"
-                combined_path = output_root / f"{case_id}_{args.view}.png"
-                original_image.save(original_path)
-                result_image.save(result_path)
-                compose_side_by_side(original_image, result_image).save(combined_path)
-
-                metrics = image_metrics(original_image, result_image)
-                case_output.update(
+            result_obj = results_root / case_id / "result.obj"
+            if not result_obj.is_file():
+                cases_json.append(
                     {
-                        "success": True,
-                        "original_image": str(original_path),
-                        "result_image": str(result_path),
-                        "comparison_image": str(combined_path),
-                        **metrics,
+                        "id": case_id,
+                        "success": False,
+                        "error": f"Missing result OBJ: {result_obj}",
                     }
                 )
+                continue
 
-                if args.diff:
-                    diff_path = output_root / f"{case_id}_{args.view}_diff.png"
-                    difference_image(original_image, result_image).save(diff_path)
-                    case_output["difference_image"] = str(diff_path)
-
-                rendered_rows.append((case_id, original_image, result_image))
-                print(
-                    f"[{case_id}] MAE={metrics['mae']:.3f} RMSE={metrics['rmse']:.3f} "
-                    f"PSNR={metrics['psnr']:.2f} dB"
+            if args.novel_views > 0:
+                original_directions = dataset.load_original_view_directions(case_id)
+                manifest_view = dataset.load_view_camera(case_id, "front")
+                distance = manifest_view.camera.distance
+                ortho_scale = manifest_view.camera.ortho_scale
+                views = generate_novel_views(
+                    original_directions,
+                    args.novel_views,
+                    args.novel_min_angle,
+                    distance,
+                    ortho_scale,
                 )
-            except Exception as exc:
-                case_output["error"] = str(exc)
-                print(f"[{case_id}] ERROR: {exc}", file=sys.stderr)
+                if not views:
+                    raise ValueError("Failed to generate novel views")
+            else:
+                views = [dataset.load_view_camera(case_id, args.view)]
 
-            cases_json.append(case_output)
+            original_scene = dataset.load_original_scene(case_id)
+            original_meshes = load_original_meshes(original_scene)
+            result_meshes = load_result_meshes(result_obj)
+
+            for view in views:
+                case_output: dict[str, Any] = {
+                    "id": case_id,
+                    "view": view.label,
+                    "azimuth": view.azimuth,
+                    "elevation": view.elevation,
+                    "resolution": args.size,
+                    "success": False,
+                }
+                try:
+                    original_image = render_asset(original_meshes, view.camera, args.size)
+                    result_image = render_asset(result_meshes, view.camera, args.size)
+
+                    original_path = output_root / f"{case_id}_{view.label}_original.png"
+                    result_path = output_root / f"{case_id}_{view.label}_result.png"
+                    combined_path = output_root / f"{case_id}_{view.label}.png"
+                    original_image.save(original_path)
+                    result_image.save(result_path)
+                    compose_side_by_side(original_image, result_image).save(combined_path)
+
+                    metrics = image_metrics(original_image, result_image)
+                    case_output.update(
+                        {
+                            "success": True,
+                            "original_image": str(original_path),
+                            "result_image": str(result_path),
+                            "comparison_image": str(combined_path),
+                            **metrics,
+                        }
+                    )
+
+                    if args.diff:
+                        diff_path = output_root / f"{case_id}_{view.label}_diff.png"
+                        difference_image(original_image, result_image).save(diff_path)
+                        case_output["difference_image"] = str(diff_path)
+
+                    rendered_rows.append((f"{case_id} / {view.label}", original_image, result_image))
+                    print(
+                        f"[{case_id}/{view.label}] MAE={metrics['mae']:.3f} "
+                        f"RMSE={metrics['rmse']:.3f} PSNR={metrics['psnr']:.2f} dB"
+                    )
+                except Exception as exc:
+                    case_output["error"] = str(exc)
+                    print(f"[{case_id}/{view.label}] ERROR: {exc}", file=sys.stderr)
+
+                cases_json.append(case_output)
 
             original_scene = None
             original_meshes = []
@@ -563,25 +763,29 @@ def main() -> int:
         contact_path = output_root / "contact.png"
         make_contact_sheet(rendered_rows).save(contact_path)
 
+    unique_case_ids = sorted({str(case["id"]) for case in cases_json})
     summary = {
         "dataset": str(dataset_path),
         "results": str(results_root),
         "output": str(output_root),
         "view": args.view,
+        "view_count": len(cases_json),
+        "case_count": len(unique_case_ids),
         "resolution": args.size,
         "color_mode": "base_color",
         "lighting": False,
         "normal_maps": False,
         "metallic_roughness": False,
-        "case_count": len(cases_json),
-        "success_count": sum(1 for case in cases_json if case["success"]),
-        "failure_count": sum(1 for case in cases_json if not case["success"]),
+        "novel_views": args.novel_views,
+        "novel_min_angle": args.novel_min_angle,
+        "success_count": sum(1 for case in cases_json if case.get("success")),
+        "failure_count": sum(1 for case in cases_json if not case.get("success")),
         "cases": cases_json,
     }
     (output_root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
     if not rendered_rows:
-        print("No cases were rendered successfully.", file=sys.stderr)
+        print("No views were rendered successfully.", file=sys.stderr)
         return 1
 
     print(f"Comparison output written to {output_root}")
